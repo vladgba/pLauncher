@@ -5,7 +5,7 @@ import android.content.res.Configuration
 import android.view.ContextThemeWrapper
 
 /**
- * Day / night colours for everything Sheaf draws itself.
+ * Day / night colours for everything pLauncher draws itself.
  * [night] is set by the activity from the "Color mode" setting
  * (system / day / night) and read whenever views bind or draw.
  */

@@ -16,7 +16,7 @@ import kotlin.math.roundToInt
 /**
  * App shortcuts (the "New message", "Selfie", … actions apps publish).
  * Only the default home app may read them, so everything degrades to
- * "no shortcuts" when Sheaf isn't the default launcher.
+ * "no shortcuts" when pLauncher isn't the default launcher.
  */
 class Shortcuts(private val context: Context) {
     private val la = context.getSystemService(LauncherApps::class.java)
@@ -67,7 +67,7 @@ class Shortcuts(private val context: Context) {
     }
 
     companion object {
-        private const val TAG = "Sheaf"
+        private const val TAG = "pLauncher"
 
         fun small(ctx: Context, d: Drawable, sizeDp: Float = 24f): Drawable {
             val px = (sizeDp * ctx.resources.displayMetrics.density).roundToInt()

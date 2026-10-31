@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Sheaf" parent="Theme.Sheaf.Base">
+    <style name="Theme.PLauncher" parent="Theme.PLauncher.Base">
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>

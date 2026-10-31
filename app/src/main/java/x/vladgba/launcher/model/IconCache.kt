@@ -85,7 +85,7 @@ class IconCache(context: Context) {
         bmp.recycle()
         tmp.renameTo(file)
     } catch (e: Exception) {
-        Log.w("Sheaf", "icon cache write failed for ${a.component}", e)
+        Log.w("pLauncher", "icon cache write failed for ${a.component}", e)
         false
     }
 

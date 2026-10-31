@@ -33,7 +33,7 @@ enum class HomeAction(val key: String, val label: String) {
  * Accessibility service used only for global actions (lock screen, notification
  * shade, quick settings). It does not read window content and ignores all events.
  */
-class SheafAccessibilityService : AccessibilityService() {
+class LauncherAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() { instance = this }
     override fun onUnbind(intent: Intent?): Boolean { instance = null; return super.onUnbind(intent) }
     override fun onDestroy() { instance = null; super.onDestroy() }
@@ -42,26 +42,26 @@ class SheafAccessibilityService : AccessibilityService() {
 
     companion object {
         @SuppressLint("StaticFieldLeak")
-        @Volatile var instance: SheafAccessibilityService? = null
+        @Volatile var instance: LauncherAccessibilityService? = null
             private set
     }
 }
 
 /** Device admin fallback for locking (policy: force-lock only). */
-class SheafDeviceAdmin : DeviceAdminReceiver()
+class LauncherDeviceAdmin : DeviceAdminReceiver()
 
 object HomeActions {
-    private const val TAG = "Sheaf"
+    private const val TAG = "pLauncher"
 
-    private fun admin(ctx: Context) = ComponentName(ctx, SheafDeviceAdmin::class.java)
+    private fun admin(ctx: Context) = ComponentName(ctx, LauncherDeviceAdmin::class.java)
     private fun dpm(ctx: Context) = ctx.getSystemService(DevicePolicyManager::class.java)
 
-    fun accessibilityOn() = SheafAccessibilityService.instance != null
+    fun accessibilityOn() = LauncherAccessibilityService.instance != null
     fun adminOn(ctx: Context) = dpm(ctx).isAdminActive(admin(ctx))
 
     /** Runs the action; if nothing can perform it yet, explains how to enable it. */
     fun perform(a: Activity, action: HomeAction) {
-        val svc = SheafAccessibilityService.instance
+        val svc = LauncherAccessibilityService.instance
         when (action) {
             HomeAction.NONE -> {}
 
@@ -137,11 +137,11 @@ object HomeActions {
         val i = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
             .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin(a))
             .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                "Lets Sheaf lock the screen when you press Home on the default page.")
+                "Lets pLauncher lock the screen when you press Home on the default page.")
         try { a.startActivity(i) } catch (e: Exception) { Log.w(TAG, "admin request failed", e) }
     }
 
-    /** Must be called before Sheaf can be uninstalled if device admin was enabled. */
+    /** Must be called before pLauncher can be uninstalled if device admin was enabled. */
     fun removeAdmin(ctx: Context) {
         if (adminOn(ctx)) dpm(ctx).removeActiveAdmin(admin(ctx))
     }

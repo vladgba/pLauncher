@@ -33,7 +33,7 @@ class WorkspaceStore(context: Context) {
         }
     }
 
-    private companion object { const val TAG = "Sheaf" }
+    private companion object { const val TAG = "pLauncher" }
 }
 
 /** [updated] = package lastUpdateTime, used to tell whether a cached icon is stale. */

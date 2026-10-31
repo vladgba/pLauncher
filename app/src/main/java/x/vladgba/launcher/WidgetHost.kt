@@ -14,14 +14,14 @@ import android.widget.TextView
 import x.vladgba.launcher.ui.dpi
 
 /**
- * Widget host that creates [SheafWidgetHostView]s and reports provider changes
+ * Widget host that creates [LauncherWidgetHostView]s and reports provider changes
  * (app updated / installed), so widgets that failed to load can be retried.
  */
-class SheafWidgetHost(context: Context, hostId: Int, private val onProvidersChangedCb: () -> Unit) :
+class LauncherWidgetHost(context: Context, hostId: Int, private val onProvidersChangedCb: () -> Unit) :
     AppWidgetHost(context, hostId) {
 
     override fun onCreateView(context: Context, appWidgetId: Int, appWidget: AppWidgetProviderInfo?): AppWidgetHostView =
-        SheafWidgetHostView(context)
+        LauncherWidgetHostView(context)
 
     override fun onProvidersChanged() {
         super.onProvidersChanged()
@@ -33,7 +33,7 @@ class SheafWidgetHost(context: Context, hostId: Int, private val onProvidersChan
  * Host view that remembers whether the last update failed to inflate and shows a
  * tappable "retry" view instead of the stock "Can't load widget".
  */
-class SheafWidgetHostView(context: Context) : AppWidgetHostView(context) {
+class LauncherWidgetHostView(context: Context) : AppWidgetHostView(context) {
     var removePadding = false
     var onRetry: (() -> Unit)? = null
     var failed = false
@@ -41,7 +41,7 @@ class SheafWidgetHostView(context: Context) : AppWidgetHostView(context) {
 
     override fun setAppWidget(appWidgetId: Int, info: AppWidgetProviderInfo?) {
         super.setAppWidget(appWidgetId, info)
-        // Sheaf has always laid widgets out without host padding. Provider-info
+        // pLauncher has always laid widgets out without host padding. Provider-info
         // refreshes call this too, so keep that policy when Android resets it.
         setPadding(0, 0, 0, 0)
     }

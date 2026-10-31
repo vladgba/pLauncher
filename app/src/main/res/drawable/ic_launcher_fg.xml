@@ -1,25 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A fanned sheaf of cards: pages + free z-order; widget glyphs on the top card -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <group android:pivotX="54" android:pivotY="70" android:rotation="-20">
-        <path android:fillColor="#59FFFFFF"
-            android:pathData="M44,36h20a5,5 0,0 1,5 5v30a5,5 0,0 1,-5 5h-20a5,5 0,0 1,-5 -5v-30a5,5 0,0 1,5 -5z" />
-    </group>
-    <group android:pivotX="54" android:pivotY="70" android:rotation="-7">
-        <path android:fillColor="#99FFFFFF"
-            android:pathData="M44,36h20a5,5 0,0 1,5 5v30a5,5 0,0 1,-5 5h-20a5,5 0,0 1,-5 -5v-30a5,5 0,0 1,5 -5z" />
-    </group>
-    <group android:pivotX="54" android:pivotY="70" android:rotation="8">
-        <path android:fillColor="#FFFFFFFF"
-            android:pathData="M44,36h20a5,5 0,0 1,5 5v30a5,5 0,0 1,-5 5h-20a5,5 0,0 1,-5 -5v-30a5,5 0,0 1,5 -5z" />
-        <!-- widget glyphs -->
-        <path android:fillColor="#FF3B4CCA"
-            android:pathData="M44,41h20a1.5,1.5 0,0 1,1.5 1.5v9a1.5,1.5 0,0 1,-1.5 1.5h-20a1.5,1.5 0,0 1,-1.5 -1.5v-9a1.5,1.5 0,0 1,1.5 -1.5z" />
-        <path android:fillColor="#FF6D4AE0"
-            android:pathData="M48,63m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
-        <path android:fillColor="#FF9AA6E8"
-            android:pathData="M57,58.5h6a1.5,1.5 0,0 1,1.5 1.5v6a1.5,1.5 0,0 1,-1.5 1.5h-6a1.5,1.5 0,0 1,-1.5 -1.5v-6a1.5,1.5 0,0 1,1.5 -1.5z" />
-    </group>
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M37,32H47A5,5 0 0 1 52,37V47A5,5 0 0 1 47,52H37A5,5 0 0 1 32,47V37A5,5 0 0 1 37,32ZM61,32H71A5,5 0 0 1 76,37V47A5,5 0 0 1 71,52H61A5,5 0 0 1 56,47V37A5,5 0 0 1 61,32ZM37,56H47A5,5 0 0 1 52,61V71A5,5 0 0 1 47,76H37A5,5 0 0 1 32,71V61A5,5 0 0 1 37,56Z" />
+    <path
+        android:fillColor="#FF8B5CF6"
+        android:pathData="M56,66A10,10 0 1 0 76,66A10,10 0 1 0 56,66Z" />
 </vector>

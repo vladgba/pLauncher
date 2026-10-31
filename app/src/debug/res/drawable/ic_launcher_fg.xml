@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug build only: main/res/drawable/ic_launcher_fg.xml with an amber accent. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M37,32H47A5,5 0 0 1 52,37V47A5,5 0 0 1 47,52H37A5,5 0 0 1 32,47V37A5,5 0 0 1 37,32ZM61,32H71A5,5 0 0 1 76,37V47A5,5 0 0 1 71,52H61A5,5 0 0 1 56,47V37A5,5 0 0 1 61,32ZM37,56H47A5,5 0 0 1 52,61V71A5,5 0 0 1 47,76H37A5,5 0 0 1 32,71V61A5,5 0 0 1 37,56Z" />
+    <path
+        android:fillColor="#FFF59E0B"
+        android:pathData="M56,66A10,10 0 1 0 76,66A10,10 0 1 0 56,66Z" />
+</vector>

@@ -37,7 +37,7 @@
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <!-- Lets Android Studio "Run" start it; Sheaf hides itself from the home screen -->
+            <!-- Lets Android Studio "Run" start it; pLauncher hides itself from the home screen -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

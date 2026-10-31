@@ -13,6 +13,9 @@ import java.io.File
 class WorkspaceStore(context: Context) {
     private val file = AtomicFile(File(context.filesDir, "workspace.json"))
 
+    /** True until the workspace has been saved once (first start of the launcher). */
+    val isFirstRun: Boolean get() = !file.baseFile.exists()
+
     fun load(): WorkspaceModel = try {
         WorkspaceModel.fromJson(JSONObject(String(file.readFully(), Charsets.UTF_8)))
     } catch (e: Exception) {

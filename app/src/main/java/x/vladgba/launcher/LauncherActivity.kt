@@ -38,6 +38,7 @@ import x.vladgba.launcher.model.AppInfo
 import x.vladgba.launcher.model.AppItem
 import x.vladgba.launcher.model.AppRepository
 import x.vladgba.launcher.model.FolderItem
+import x.vladgba.launcher.model.groupByPackage
 import x.vladgba.launcher.model.GridItem
 import x.vladgba.launcher.model.HomeItem
 import x.vladgba.launcher.model.IconCache
@@ -107,6 +108,9 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     private var resizeItem: WidgetItem? = null
     /** True while the home screen is visible and focused (no app or dialog over it). */
     private var hasFocus = false
+    /** First start: apps wait for the "group by package" dialog before being placed. */
+    private var firstRun = false
+    private var groupDialogShown = false
 
     // ================================================================= lifecycle
 
@@ -115,6 +119,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         setupWindow()
 
         store = WorkspaceStore(this)
+        firstRun = store.isFirstRun
         model = store.load()
         repo = AppRepository(this)
         iconCache = IconCache(this)
@@ -278,6 +283,20 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
             main.post {
                 if (isDestroyed) return@post
                 apps = list.associateBy { it.component }
+                if (firstRun && list.isNotEmpty()) {
+                    // Nothing is placed until the user chose package groups (or skipped).
+                    if (!groupDialogShown) {
+                        groupDialogShown = true
+                        Dialogs.groupByPackage(this, list.map { it.component }) { groups ->
+                            firstRun = false
+                            val n = model.groupByPackage(
+                                apps.values.sortedBy { it.label.lowercase() }.map { it.component }, groups)
+                            if (n > 0) toast(if (n == 1) "Created 1 folder" else "Created $n folders")
+                            reloadApps()
+                        }
+                    }
+                    return@post
+                }
                 removeDeadWidgets()
                 val (w, h) = workspace.contentSizeDp()
                 val pagesBefore = model.config.pagesX
@@ -529,7 +548,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         setPadding(dpi(8f), dpi(8f), dpi(8f), dpi(8f))
         // Opaque card, so icons under the widget's area don't show through the text.
         background = android.graphics.drawable.GradientDrawable().apply {
-            setColor(Palette.card); cornerRadius = dp(16f)
+            setColor(Palette.card); cornerRadius = dp(20f)
         }
         setOnClickListener {
             skippedRestores.remove(item.id)
@@ -1221,7 +1240,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     /** Asks where to save a backup of layout, settings, hidden apps, labels, gestures and custom icons. */
     fun exportSettings() {
         save()
-        val name = "sheaf-backup-" + java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+        val name = "pLauncher-backup-" + java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
             .format(java.util.Date()) + ".json"
         val i = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
             .setType("application/json").putExtra(Intent.EXTRA_TITLE, name)
@@ -1261,7 +1280,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     }
 
     private fun confirmImport(uri: Uri) {
-        android.app.AlertDialog.Builder(this)
+        android.app.AlertDialog.Builder(Palette.ui(this), Palette.dialogTheme)
             .setTitle("Import settings?")
             .setMessage("This replaces the current layout, settings, hidden apps and custom icons. " +
                     "Widgets are re-added in their places: Android may ask to allow each one " +
@@ -1276,14 +1295,14 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
             val result = try {
                 val text = contentResolver.openInputStream(uri)!!.use { String(it.readBytes(), Charsets.UTF_8) }
                 val root = org.json.JSONObject(text)
-                require(root.optString("format") == BACKUP_FORMAT) { "Not a Sheaf backup" }
+                require(root.optString("format") == BACKUP_FORMAT) { "Not a pLauncher backup" }
                 val ws = root.getJSONObject("workspace")
                 val imported = WorkspaceModel.fromJson(ws) // validate before touching anything
                 Pair(imported, root.optJSONObject("iconFiles"))
             } catch (e: Exception) { null }
             main.post {
                 if (isDestroyed) return@post
-                if (result == null) { toast("Not a valid Sheaf backup"); return@post }
+                if (result == null) { toast("Not a valid pLauncher backup"); return@post }
                 applyBackup(result.first, result.second)
             }
         }

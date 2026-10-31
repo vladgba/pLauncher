@@ -106,8 +106,8 @@ object HomeActions {
             if (Build.VERSION.SDK_INT >= 28) add("Accessibility service (recommended)")
             add("Device admin")
         }
-        AlertDialog.Builder(a, x.vladgba.launcher.ui.Palette.dialogTheme)
-            .setTitle("Allow Sheaf to lock the screen")
+        AlertDialog.Builder(x.vladgba.launcher.ui.Palette.ui(a), x.vladgba.launcher.ui.Palette.dialogTheme)
+            .setTitle("Allow pLauncher to lock the screen")
             .setItems(options.toTypedArray()) { _, i ->
                 if (options[i].startsWith("Accessibility")) openAccessibilitySettings(a) else requestAdmin(a)
             }
@@ -116,9 +116,9 @@ object HomeActions {
     }
 
     private fun askToEnableAccessibility(a: Activity) {
-        AlertDialog.Builder(a, x.vladgba.launcher.ui.Palette.dialogTheme)
-            .setTitle("Enable Sheaf accessibility")
-            .setMessage("Opening the notification shade or quick settings needs the Sheaf accessibility service. " +
+        AlertDialog.Builder(x.vladgba.launcher.ui.Palette.ui(a), x.vladgba.launcher.ui.Palette.dialogTheme)
+            .setTitle("Enable pLauncher accessibility")
+            .setMessage("Opening the notification shade or quick settings needs the pLauncher accessibility service. " +
                     "It only performs these system actions and does not read screen content.")
             .setPositiveButton("Open settings") { _, _ -> openAccessibilitySettings(a) }
             .setNegativeButton(android.R.string.cancel, null)

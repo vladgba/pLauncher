@@ -35,7 +35,7 @@ object Panels {
 
     private fun cardBackground(ctx: Context) = GradientDrawable().apply {
         setColor(Palette.card)
-        cornerRadius = ctx.dp(24f)
+        cornerRadius = ctx.dp(20f)
     }
 
     // ================================================================= folder

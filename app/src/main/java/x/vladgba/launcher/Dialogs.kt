@@ -25,6 +25,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import x.vladgba.launcher.model.FolderItem
 import x.vladgba.launcher.model.LauncherConfig
+import x.vladgba.launcher.model.PackageGroups
 import x.vladgba.launcher.ui.AppIconView
 import x.vladgba.launcher.ui.Palette
 import x.vladgba.launcher.ui.dp
@@ -35,7 +36,7 @@ import kotlin.math.roundToInt
 /** All dialogs, built in code (the project has no layout XML or support libraries). */
 object Dialogs {
 
-    private fun builder(ctx: Context) = AlertDialog.Builder(ctx, Palette.dialogTheme)
+    private fun builder(ctx: Context) = AlertDialog.Builder(Palette.ui(ctx), Palette.dialogTheme)
 
     private fun textColor(ctx: Context): Int {
         val tv = TypedValue()
@@ -187,6 +188,54 @@ object Dialogs {
                 cfg.colorMode = (0 until modeGroup.childCount).map { modeGroup.getChildAt(it) as RadioButton }
                     .firstOrNull { it.isChecked }?.tag as? String ?: "system"
                 onApply()
+            }
+            .show()
+    }
+
+    // ------------------------------------------------------------ first start
+
+    /**
+     * First start: offers to put apps into folders by package name. Suggested prefixes
+     * (shared by several installed apps) are checkboxes; custom patterns go one folder per
+     * line, several patterns on a line share a folder. [onDone] gets the chosen groups
+     * (empty when skipped).
+     */
+    fun groupByPackage(a: LauncherActivity, components: List<String>, onDone: (List<List<String>>) -> Unit) {
+        val b = builder(a)
+        val ctx = b.context
+        val col = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(a.dpi(24f), a.dpi(8f), a.dpi(24f), a.dpi(8f))
+        }
+        col.addView(TextView(ctx).apply {
+            text = "Put apps whose package names match into folders. You can rename, " +
+                "ungroup or rearrange them later."
+            textSize = 14f
+        })
+        val suggestions = PackageGroups.suggest(components)
+        val boxes = suggestions.map { (pattern, count) ->
+            CheckBox(ctx).apply { text = "$pattern  ($count apps)"; tag = pattern }.also { col.addView(it) }
+        }
+        col.addView(TextView(ctx).apply {
+            text = "Custom patterns: one folder per line, e.g. x.vladgba.*  (commas join " +
+                "several patterns into one folder)"
+            textSize = 13f
+            setPadding(0, a.dpi(12f), 0, 0)
+        })
+        val custom = EditText(ctx).apply {
+            hint = "x.vladgba.*\ncom.android.*, com.google.android.*"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            minLines = 2
+        }
+        col.addView(custom, LinearLayout.LayoutParams(-1, -2))
+        b.setTitle("Group apps by package").setView(ScrollView(ctx).apply { addView(col) })
+            .setCancelable(false)
+            .setNegativeButton("Skip") { _, _ -> onDone(emptyList()) }
+            .setPositiveButton("Group") { _, _ ->
+                val groups = custom.text.lines().map(PackageGroups::parseLine).filter { it.isNotEmpty() } +
+                    boxes.filter { it.isChecked }.map { listOf(it.tag as String) }
+                onDone(groups)
             }
             .show()
     }

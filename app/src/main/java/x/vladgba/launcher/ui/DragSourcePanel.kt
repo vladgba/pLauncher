@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher.ui
+package x.vladgba.launcher.ui
 
 import android.annotation.SuppressLint
 import android.content.Context

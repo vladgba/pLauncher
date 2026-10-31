@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher
+package x.vladgba.launcher
 
 import android.content.Context
 import android.content.pm.LauncherApps

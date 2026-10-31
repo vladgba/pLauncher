@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher.ui
+package x.vladgba.launcher.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -12,12 +12,12 @@ import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.OverScroller
-import x.vladgba.sheaflauncher.model.AppItem
-import x.vladgba.sheaflauncher.model.FolderItem
-import x.vladgba.sheaflauncher.model.GridItem
-import x.vladgba.sheaflauncher.model.HomeItem
-import x.vladgba.sheaflauncher.model.WidgetItem
-import x.vladgba.sheaflauncher.model.WorkspaceModel
+import x.vladgba.launcher.model.AppItem
+import x.vladgba.launcher.model.FolderItem
+import x.vladgba.launcher.model.GridItem
+import x.vladgba.launcher.model.HomeItem
+import x.vladgba.launcher.model.WidgetItem
+import x.vladgba.launcher.model.WorkspaceModel
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.hypot

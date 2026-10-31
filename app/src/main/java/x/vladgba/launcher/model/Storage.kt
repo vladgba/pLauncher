@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher.model
+package x.vladgba.launcher.model
 
 import android.content.ComponentName
 import android.content.Context

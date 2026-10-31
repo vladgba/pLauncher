@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher.ui
+package x.vladgba.launcher.ui
 
 import android.content.Context
 import android.content.res.Configuration

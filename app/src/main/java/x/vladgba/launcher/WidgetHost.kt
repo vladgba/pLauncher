@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher
+package x.vladgba.launcher
 
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetHostView
@@ -11,7 +11,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.TextView
-import x.vladgba.sheaflauncher.ui.dpi
+import x.vladgba.launcher.ui.dpi
 
 /**
  * Widget host that creates [SheafWidgetHostView]s and reports provider changes

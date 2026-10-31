@@ -8,7 +8,7 @@ repositories { mavenCentral() }
 dependencies { implementation("org.json:json:20240303") }
 kotlin { jvmToolchain(17) }
 sourceSets.main {
-    kotlin.srcDirs("src", "../../app/src/main/java/x/vladgba/sheaflauncher/model")
+    kotlin.srcDirs("src", "../../app/src/main/java/x/vladgba/launcher/model")
     kotlin.include("Model.kt", "BackupGeometryChecks.kt")
 }
 application { mainClass.set("BackupGeometryChecksKt") }

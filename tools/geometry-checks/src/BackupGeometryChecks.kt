@@ -1,7 +1,7 @@
 import org.json.JSONArray
 import org.json.JSONObject
-import x.vladgba.sheaflauncher.model.WidgetItem
-import x.vladgba.sheaflauncher.model.WorkspaceModel
+import x.vladgba.launcher.model.WidgetItem
+import x.vladgba.launcher.model.WorkspaceModel
 import kotlin.math.abs
 import kotlin.random.Random
 

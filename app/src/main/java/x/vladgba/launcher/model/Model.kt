@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher.model
+package x.vladgba.launcher.model
 
 import kotlin.math.abs
 import org.json.JSONArray

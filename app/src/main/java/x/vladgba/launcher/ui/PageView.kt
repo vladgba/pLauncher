@@ -1,14 +1,14 @@
-package x.vladgba.sheaflauncher.ui
+package x.vladgba.launcher.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
-import x.vladgba.sheaflauncher.model.GridItem
-import x.vladgba.sheaflauncher.model.HomeItem
-import x.vladgba.sheaflauncher.model.LauncherConfig
-import x.vladgba.sheaflauncher.model.WidgetItem
+import x.vladgba.launcher.model.GridItem
+import x.vladgba.launcher.model.HomeItem
+import x.vladgba.launcher.model.LauncherConfig
+import x.vladgba.launcher.model.WidgetItem
 import kotlin.math.roundToInt
 
 /**

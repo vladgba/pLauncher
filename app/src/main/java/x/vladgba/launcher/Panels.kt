@@ -1,4 +1,4 @@
-package x.vladgba.sheaflauncher
+package x.vladgba.launcher
 
 import android.annotation.SuppressLint
 import android.appwidget.AppWidgetManager
@@ -20,12 +20,12 @@ import android.widget.LinearLayout
 import android.widget.RemoteViews
 import android.widget.ScrollView
 import android.widget.TextView
-import x.vladgba.sheaflauncher.model.FolderItem
-import x.vladgba.sheaflauncher.ui.AppIconView
-import x.vladgba.sheaflauncher.ui.DragSourcePanel
-import x.vladgba.sheaflauncher.ui.Palette
-import x.vladgba.sheaflauncher.ui.dp
-import x.vladgba.sheaflauncher.ui.dpi
+import x.vladgba.launcher.model.FolderItem
+import x.vladgba.launcher.ui.AppIconView
+import x.vladgba.launcher.ui.DragSourcePanel
+import x.vladgba.launcher.ui.Palette
+import x.vladgba.launcher.ui.dp
+import x.vladgba.launcher.ui.dpi
 import java.util.concurrent.Executors
 import kotlin.math.min
 import kotlin.math.roundToInt

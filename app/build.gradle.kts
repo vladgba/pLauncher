@@ -7,11 +7,11 @@ plugins {
 apply(from = rootProject.file("gradle/android-common.gradle"))
 
 android {
-    namespace = "x.vladgba.sheaflauncher"
+    namespace = "x.vladgba.launcher"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "x.vladgba.sheaflauncher"
+        applicationId = "x.vladgba.launcher"
         minSdk = 26
         targetSdk = 35
     }

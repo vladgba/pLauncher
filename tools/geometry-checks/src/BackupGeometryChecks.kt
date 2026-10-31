@@ -5,8 +5,8 @@ import x.vladgba.launcher.model.WorkspaceModel
 import kotlin.math.abs
 import kotlin.random.Random
 
-private var checks = 0
-private fun verify(ok: Boolean, message: String) {
+internal var checks = 0
+internal fun verify(ok: Boolean, message: String) {
     checks++
     check(ok) { message }
 }
@@ -119,4 +119,5 @@ fun main() {
         }
     }
     println("Backup geometry checks passed: $checks")
+    packageGroupChecks()
 }

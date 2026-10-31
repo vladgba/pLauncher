@@ -1,5 +1,8 @@
 package x.vladgba.launcher
 
+import x.vladgba.launcher.pui.PAboutInfo
+import x.vladgba.launcher.pui.showPAbout
+
 import android.app.Activity
 import android.app.ActivityOptions
 import android.appwidget.AppWidgetHostView
@@ -69,7 +72,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     private lateinit var repo: AppRepository
     private lateinit var iconCache: IconCache
     private lateinit var widgetManager: AppWidgetManager
-    private lateinit var widgetHost: SheafWidgetHost
+    private lateinit var widgetHost: LauncherWidgetHost
     private lateinit var launcherApps: LauncherApps
 
     private lateinit var root: FrameLayout
@@ -126,7 +129,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         // Show cached icons right away; live icons replace them after reloadApps().
         apps = iconCache.memory().ifEmpty { iconCache.loadDisk() }
         widgetManager = AppWidgetManager.getInstance(this)
-        widgetHost = SheafWidgetHost(this, WIDGET_HOST_ID) { main.post { reloadBrokenWidgets() } }
+        widgetHost = LauncherWidgetHost(this, WIDGET_HOST_ID) { main.post { reloadBrokenWidgets() } }
         launcherApps = getSystemService(LauncherApps::class.java)
         shortcuts = Shortcuts(this)
 
@@ -518,7 +521,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         } catch (e: Exception) {
             return unavailableView(item)
         }
-        (v as? SheafWidgetHostView)?.onRetry = { reloadWidget(item) }
+        (v as? LauncherWidgetHostView)?.onRetry = { reloadWidget(item) }
         // Give the provider its real size right away; many widgets only render after this.
         updateWidgetSize(item, v)
         v.post { updateWidgetSize(item, v) }
@@ -588,7 +591,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         var any = false
         for (w in model.widgets()) {
             val v = workspace.itemViews[w.id]
-            val broken = (v is SheafWidgetHostView && v.failed) || (v != null && v !is SheafWidgetHostView)
+            val broken = (v is LauncherWidgetHostView && v.failed) || (v != null && v !is LauncherWidgetHostView)
             if (broken) { workspace.itemViews.remove(w.id)?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }; any = true }
         }
         if (any) workspace.sync()
@@ -596,7 +599,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
 
     /** Tells the widget its real size so it can pick a layout. */
     private fun updateWidgetSize(item: WidgetItem, view: View? = workspace.itemViews[item.id]) {
-        if (view is SheafWidgetHostView) {
+        if (view is LauncherWidgetHostView) {
             view.removePadding = item.removePadding
             view.updateWorkspaceSize(item.w, item.h)
             return
@@ -643,6 +646,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
                 pm.menu.add(0, 4, 3, "Set as default page")
             }
             pm.menu.add(0, 5, 4, if (locked) "Unlock layout" else "Lock layout")
+            pm.menu.add(0, 6, 5, "About pLauncher")
             pm.setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> Panels.pickWidget(this)
@@ -651,6 +655,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
                     } catch (_: ActivityNotFoundException) { toast("No wallpaper picker") }
                     3 -> Dialogs.settings(this, model.config) { applySettings() }
                     4 -> setDefaultPage(workspace.curX, workspace.curY)
+                    6 -> showPAbout(PAboutInfo(repo = "pLauncher"))
                     5 -> {
                         model.config.layoutLocked = !model.config.layoutLocked
                         save()
@@ -1008,7 +1013,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         }
     }
 
-    /** Page that Home returns to (and that Sheaf opens on). */
+    /** Page that Home returns to (and that pLauncher opens on). */
     private fun setDefaultPage(px: Int, py: Int) {
         model.config.homeX = px
         model.config.homeY = py

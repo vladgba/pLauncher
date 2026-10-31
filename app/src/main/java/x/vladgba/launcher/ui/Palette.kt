@@ -27,19 +27,27 @@ object Palette {
     val dotOn get() = if (night) 0xFFFFFFFF.toInt() else 0xFF1F1F1F.toInt()
     val dotOff get() = if (night) 0x66FFFFFF else 0x55000000
 
-    // Panels (folder, widget picker)
+    // Panels (folder, widget picker): suite pUI surfaces (p_surface / p_text / p_text2 / p_accent_text)
     val scrim get() = if (night) 0x77000000 else 0x44000000
-    val card get() = if (night) 0xF0202124.toInt() else 0xF5F7F7F7.toInt()
-    val cardText get() = if (night) 0xFFFFFFFF.toInt() else 0xFF1F1F1F.toInt()
-    val cardTextDim get() = if (night) 0xB3FFFFFF.toInt() else 0x99000000.toInt()
+    val card get() = if (night) 0xF21C1F26.toInt() else 0xF5FFFFFF.toInt()
+    val cardText get() = if (night) 0xFFECEDF1.toInt() else 0xFF16181D.toInt()
+    val cardTextDim get() = if (night) 0xFFA3A7B3.toInt() else 0xFF5F6370.toInt()
+    val accentText get() = if (night) 0xFFB197FC.toInt() else 0xFF6D28D9.toInt()
     val previewBg get() = if (night) 0x22FFFFFF else 0x14000000
 
-    // System-styled UI (dialogs, popup menus)
-    val dialogTheme get() = if (night) android.R.style.Theme_DeviceDefault_Dialog_Alert
-                            else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
-    private val menuTheme get() = if (night) android.R.style.Theme_DeviceDefault
-                                  else android.R.style.Theme_DeviceDefault_Light
+    // Dialogs and popup menus: pUI themes, resolved in the launcher's own color mode
+    // (which may differ from the system's), so the p_* tokens pick the matching palette.
+    val dialogTheme get() = x.vladgba.launcher.R.style.Theme_P_Dialog
+
+    /** Context whose resources use the chosen day/night mode, themed with pUI. */
+    fun ui(ctx: Context, theme: Int = x.vladgba.launcher.R.style.Theme_P_Bar): Context {
+        val cfg = Configuration(ctx.resources.configuration).apply {
+            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                (if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+        }
+        return ContextThemeWrapper(ctx, theme).apply { applyOverrideConfiguration(cfg) }
+    }
 
     /** Context for PopupMenus so they follow the chosen mode. */
-    fun menuContext(ctx: Context): Context = ContextThemeWrapper(ctx, menuTheme)
+    fun menuContext(ctx: Context): Context = ui(ctx)
 }

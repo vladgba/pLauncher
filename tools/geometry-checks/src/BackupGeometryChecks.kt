@@ -120,4 +120,5 @@ fun main() {
     }
     println("Backup geometry checks passed: $checks")
     packageGroupChecks()
+    iconSizingChecks()
 }

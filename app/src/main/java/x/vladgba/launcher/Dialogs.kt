@@ -124,6 +124,26 @@ object Dialogs {
         })
         col.addView(modeGroup)
 
+        // App search overlay (opened by the search widgets)
+        fun choice(title: String, options: List<Pair<String, String>>, current: String): RadioGroup {
+            col.addView(TextView(ctx).apply {
+                text = title; textSize = 16f
+                setPadding(0, a.dpi(16f), 0, a.dpi(4f))
+            })
+            val g = RadioGroup(ctx).apply { orientation = RadioGroup.HORIZONTAL }
+            for ((key, name) in options) g.addView(RadioButton(ctx).apply {
+                id = View.generateViewId(); text = name; tag = key
+                isChecked = key == current
+                setPadding(0, 0, a.dpi(12f), 0)
+            })
+            col.addView(g)
+            return g
+        }
+        fun RadioGroup.picked(fallback: String) = (0 until childCount).map { getChildAt(it) as RadioButton }
+            .firstOrNull { it.isChecked }?.tag as? String ?: fallback
+        val searchBarGroup = choice("Search bar position", listOf("top" to "Top", "bottom" to "Bottom"), cfg.searchBar)
+        val searchModeGroup = choice("Search size", listOf("big" to "Big", "compact" to "Compact"), cfg.searchMode)
+
         // Home button on the default page
         col.addView(TextView(ctx).apply {
             text = "Home button on default page"; textSize = 16f
@@ -185,6 +205,8 @@ object Dialogs {
                 val picked = (0 until group.childCount).map { group.getChildAt(it) as RadioButton }
                     .firstOrNull { it.isChecked }?.tag as? HomeAction
                 cfg.homeAction = (picked ?: HomeAction.NONE).key
+                cfg.searchBar = searchBarGroup.picked("top")
+                cfg.searchMode = searchModeGroup.picked("big")
                 cfg.colorMode = (0 until modeGroup.childCount).map { modeGroup.getChildAt(it) as RadioButton }
                     .firstOrNull { it.isChecked }?.tag as? String ?: "system"
                 onApply()

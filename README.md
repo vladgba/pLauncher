@@ -6,6 +6,7 @@ A minimal Android home screen with no app drawer and no grid you have to obey. E
 
 - **All apps on the home screen.** New installs drop into the first free cell, uninstalls disappear. On first start pLauncher can group apps into folders by package (for example all `com.google.*` apps).
 - **Free-form widgets.** Add widgets from a picker with live previews, drop them anywhere, resize them to any size, or fix them to the grid. Optional per-widget padding removal.
+- **App search widgets.** Two widgets in the picker, a round search button and a full search bar, open a type-to-find screen for every installed app. There is no other search UI.
 - **2D pages.** Swipe left/right and up/down through a matrix of up to 12×12 pages, with a dot-matrix indicator. Set any page as the default; pressing Home returns to it.
 - **Folders, large icons and z-order.** Drag apps onto folders, make icons 1.5× or 2×, overlap items freely and bring them to front or send them to back.
 - **Icon gestures.** Swipe up/down/left/right on an icon to open a shortcut, another app or a system action.

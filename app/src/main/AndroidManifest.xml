@@ -44,6 +44,40 @@
             </intent-filter>
         </activity>
 
+        <!-- App search opened by the search widgets -->
+        <activity
+            android:name=".search.SearchActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/Theme.PLauncher.Search"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <receiver
+            android:name=".search.SearchBarWidget"
+            android:exported="false"
+            android:label="@string/search_widget_bar_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/search_bar_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".search.SearchButtonWidget"
+            android:exported="false"
+            android:label="@string/search_widget_button_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/search_button_widget_info" />
+        </receiver>
+
         <!-- Home-button actions: lock screen, notification shade, quick settings -->
         <service
             android:name=".LauncherAccessibilityService"

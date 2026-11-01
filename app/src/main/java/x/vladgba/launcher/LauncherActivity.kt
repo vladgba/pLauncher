@@ -45,6 +45,7 @@ import x.vladgba.launcher.model.groupByPackage
 import x.vladgba.launcher.model.GridItem
 import x.vladgba.launcher.model.HomeItem
 import x.vladgba.launcher.model.IconCache
+import x.vladgba.launcher.model.IconBitmaps
 import x.vladgba.launcher.model.WidgetItem
 import x.vladgba.launcher.model.WorkspaceModel
 import x.vladgba.launcher.model.WorkspaceStore
@@ -351,7 +352,8 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         return when {
             spec.startsWith("app:") -> apps[spec.removePrefix("app:")]?.icon
             spec.startsWith("file:") -> customIconCache[spec] ?: run {
-                val bmp = BitmapFactory.decodeFile(File(customIconDir, spec.removePrefix("file:")).path)
+                val edge = (96 * resources.displayMetrics.density).toInt().coerceIn(96, 384)
+                val bmp = IconBitmaps.decodeFile(File(customIconDir, spec.removePrefix("file:")), edge)
                 bmp?.let { BitmapDrawable(resources, it).also { d -> customIconCache[spec] = d } }
             }
             else -> null
@@ -1001,6 +1003,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
             window.decorView.systemUiVisibility = v
         }
         indicator.invalidate()
+        x.vladgba.launcher.search.SearchWidget.refreshAll(this, Palette.night)
     }
 
     /** uiMode is in configChanges, so a system day/night switch lands here instead of recreating. */

@@ -69,7 +69,6 @@ class AppIconView(context: Context) : View(context) {
     private val folderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66FFFFFF }
     private val folderRect = RectF()
     private val platePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val clipRect = RectF()
     private val clipPath = android.graphics.Path()
 
@@ -155,31 +154,35 @@ class AppIconView(context: Context) : View(context) {
             d.foreground?.let { it.setBounds(bl, bt, br, bb); it.draw(canvas) }
         } else {
             val info = tileInfo(d)
-            if (info.fullBleed) {
-                canvas.drawBitmap(info.bitmap, null, clipRect, bitmapPaint)
-            } else {
+            if (!info.fullBleed) {
                 platePaint.color = info.color
                 canvas.drawRect(clipRect, platePaint)
                 val inset = size * 0.16f
                 clipRect.inset(inset, inset)
-                canvas.drawBitmap(info.bitmap, null, clipRect, bitmapPaint)
             }
+            d.setBounds(clipRect.left.roundToInt(), clipRect.top.roundToInt(),
+                clipRect.right.roundToInt(), clipRect.bottom.roundToInt())
+            d.draw(canvas)
         }
         canvas.restoreToCount(save)
     }
 
-    private class TileInfo(val bitmap: Bitmap, val fullBleed: Boolean, val color: Int)
+    private class TileInfo(val fullBleed: Boolean, val color: Int)
 
     private companion object {
         /** Per-drawable analysis, computed once (icons are shared between views). */
         val tileCache = WeakHashMap<Drawable, TileInfo>()
-        const val TILE_PX = 192
+        const val TILE_PX = 48
 
         fun tileInfo(d: Drawable): TileInfo = tileCache.getOrPut(d) {
-            val bmp = (d as? BitmapDrawable)?.bitmap?.takeIf { it.width > 0 && it.height > 0 }
-                // Hardware bitmaps can't be read pixel by pixel.
-                ?.let { if (it.config == Bitmap.Config.HARDWARE) it.copy(Bitmap.Config.ARGB_8888, false) else it }
-                ?: run {
+            // Keep only analysis results; drawing uses the original drawable.
+            // A tiny software sample also avoids copying full-size hardware bitmaps.
+            val source = (d as? BitmapDrawable)?.bitmap
+            val bmp = if (source?.config == Bitmap.Config.HARDWARE) {
+                val scaled = Bitmap.createScaledBitmap(source, TILE_PX, TILE_PX, true)
+                try { scaled.copy(Bitmap.Config.ARGB_8888, false) }
+                finally { if (scaled !== source) scaled.recycle() }
+            } else run {
                 val b = Bitmap.createBitmap(TILE_PX, TILE_PX, Bitmap.Config.ARGB_8888)
                 val c = Canvas(b)
                 val old = d.copyBounds()
@@ -188,7 +191,8 @@ class AppIconView(context: Context) : View(context) {
                 d.bounds = old
                 b
             }
-            TileInfo(bmp, opaqueCorners(bmp), averageColor(bmp))
+            try { TileInfo(opaqueCorners(bmp), averageColor(bmp)) }
+            finally { bmp.recycle() }
         }
 
         private fun opaqueCorners(b: Bitmap): Boolean {

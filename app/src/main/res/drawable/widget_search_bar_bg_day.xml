@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fixed colours: the widget is painted for the launcher's own day/night mode, not the host's resources. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <stroke android:width="1dp" android:color="#FFE2E2E8" />
+    <corners android:radius="999dp" />
+</shape>

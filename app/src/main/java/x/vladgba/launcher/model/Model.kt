@@ -135,6 +135,8 @@ class LauncherConfig {
     var homeY = 0
     var iconShape = "system" // system | square | rounded
     var snapNewWidgets = false // widgets added from the picker start fixed to the grid
+    var searchBar = "top"      // app search overlay: bar at the top | bottom
+    var searchMode = "big"     // app search overlay: big | compact
 
     fun toJson(): JSONObject = JSONObject()
         .put("columns", columns).put("rows", rows)
@@ -144,6 +146,7 @@ class LauncherConfig {
         .put("folderColumns", folderColumns).put("folderRows", folderRows)
         .put("homeAction", homeAction).put("layoutLocked", layoutLocked).put("colorMode", colorMode)
         .put("iconShape", iconShape).put("snapNewWidgets", snapNewWidgets)
+        .put("searchBar", searchBar).put("searchMode", searchMode)
 
     fun readJson(o: JSONObject) {
         columns = o.optInt("columns", columns).coerceIn(MIN_GRID, MAX_GRID)
@@ -159,6 +162,8 @@ class LauncherConfig {
         colorMode = o.optString("colorMode", colorMode)
         iconShape = o.optString("iconShape", iconShape).takeIf { it in ICON_SHAPES } ?: "system"
         snapNewWidgets = o.optBoolean("snapNewWidgets", snapNewWidgets)
+        searchBar = o.optString("searchBar", searchBar).takeIf { it in SEARCH_BARS } ?: "top"
+        searchMode = o.optString("searchMode", searchMode).takeIf { it in SEARCH_MODES } ?: "big"
         homeX = o.optInt("homeX", homeX).coerceIn(0, pagesX - 1)
         homeY = o.optInt("homeY", homeY).coerceIn(0, pagesY - 1)
     }
@@ -170,6 +175,8 @@ class LauncherConfig {
         const val MIN_FOLDER_GRID = 1
         const val MAX_FOLDER_GRID = 8
         val ICON_SHAPES = listOf("system", "square", "rounded")
+        val SEARCH_BARS = listOf("top", "bottom")
+        val SEARCH_MODES = listOf("big", "compact")
     }
 }
 

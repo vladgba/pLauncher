@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- fitCenter scales the vector uniformly, so the button stays a circle at any widget size. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/search_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="4dp">
+
+    <ImageView
+        android:id="@+id/search_icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/search_widget_button_label"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_search_button" />
+</FrameLayout>

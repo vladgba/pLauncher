@@ -4,4 +4,10 @@
     <string name="accessibility_description">Lets pLauncher lock the screen and open the notification shade or quick settings when you press Home on the default page. It does not read screen content.</string>
     <string name="device_admin_label">pLauncher screen lock</string>
     <string name="device_admin_description">Lets pLauncher lock the screen when you press Home on the default page.</string>
+    <string name="search_hint">Search apps</string>
+    <string name="search_no_results">No apps found</string>
+    <string name="search_widget_bar_label">pLauncher search bar</string>
+    <string name="search_widget_bar_description">Search bar that finds installed apps</string>
+    <string name="search_widget_button_label">pLauncher search</string>
+    <string name="search_widget_button_description">Button that opens app search</string>
 </resources>

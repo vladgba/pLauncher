@@ -10,13 +10,14 @@ import android.util.Log
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.lang.ref.WeakReference
 import kotlin.math.roundToInt
 
 /**
  * Keeps app icons + labels so the home screen is never drawn with empty icons.
  *
- *  - Memory: the last loaded app list survives activity recreation
- *    (theme change, process kept alive), so the icons are there immediately.
+ *  - Memory: weak references reuse live icons during activity recreation,
+ *    without keeping every icon alive after the activity is released.
  *  - Disk: icons are stored as PNGs in files/icon_cache with an index
  *    (label + package update time). After a cold start / reboot they are
  *    shown immediately, and the live icons from PackageManager replace them
@@ -29,11 +30,13 @@ class IconCache(context: Context) {
     private val res = context.resources
     private val dir = File(context.filesDir, "icon_cache").apply { mkdirs() }
     private val index = AtomicFile(File(dir, "index.json"))
-    /** Bitmap edge: big enough for the 150% icon size setting on large grids. */
+    /** Bitmap edge: allows enlarged icons on dense displays. */
     private val sizePx = (96 * res.displayMetrics.density).roundToInt().coerceIn(96, 384)
 
     /** Instant: last list loaded in this process, or empty. */
-    fun memory(): Map<String, AppInfo> = memoryCache
+    fun memory(): Map<String, AppInfo> = memoryCache.mapNotNull { (key, value) ->
+        value.get()?.let { key to it }
+    }.toMap()
 
     /** Reads the disk cache. Call on the main thread before the first bind (fast: small PNGs). */
     fun loadDisk(): Map<String, AppInfo> {
@@ -42,7 +45,7 @@ class IconCache(context: Context) {
         for (component in idx.keys()) {
             val e = idx.optJSONObject(component) ?: continue
             val f = File(dir, e.optString("file"))
-            val bmp = try { BitmapFactory.decodeFile(f.path) } catch (_: Exception) { null } ?: continue
+            val bmp = IconBitmaps.decodeFile(f, sizePx) ?: continue
             out[component] = AppInfo(component, e.optString("label"), BitmapDrawable(res, bmp), e.optLong("updated"))
         }
         return out
@@ -50,7 +53,7 @@ class IconCache(context: Context) {
 
     /** Remembers the fresh list and writes changed icons to disk. Call off the main thread. */
     fun store(apps: List<AppInfo>) {
-        memoryCache = apps.associateBy { it.component }
+        memoryCache = apps.associate { it.component to WeakReference(it) }
         val old = readIndex() ?: JSONObject()
         val idx = JSONObject()
         val keep = HashSet<String>()
@@ -98,6 +101,6 @@ class IconCache(context: Context) {
             Integer.toHexString(component.hashCode()) + ".png"
 
     private companion object {
-        @Volatile var memoryCache: Map<String, AppInfo> = emptyMap()
+        @Volatile var memoryCache: Map<String, WeakReference<AppInfo>> = emptyMap()
     }
 }

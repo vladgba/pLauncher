@@ -44,24 +44,30 @@ class AppInfo(val component: String, val label: String, val icon: Drawable, val 
 
 /** Queries launchable activities. Safe to call off the main thread. */
 class AppRepository(private val context: Context) {
+    private var previous: Map<String, AppInfo> = emptyMap()
+
     fun query(): List<AppInfo> {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val updated = HashMap<String, Long>()
-        return pm.queryIntentActivities(intent, 0)
+        val apps = pm.queryIntentActivities(intent, 0)
             .filter { it.activityInfo.packageName != context.packageName }
             .map {
                 val ai = it.activityInfo
                 val time = updated.getOrPut(ai.packageName) {
                     try { pm.getPackageInfo(ai.packageName, 0).lastUpdateTime } catch (_: Exception) { 0L }
                 }
+                val component = ComponentName(ai.packageName, ai.name).flattenToString()
+                val cached = previous[component]?.takeIf { time != 0L && it.updated == time }
                 AppInfo(
-                    ComponentName(ai.packageName, ai.name).flattenToString(),
+                    component,
                     it.loadLabel(pm).toString(),
-                    it.loadIcon(pm),
+                    cached?.icon ?: it.loadIcon(pm),
                     time
                 )
             }
             .sortedBy { it.label.lowercase() }
+        previous = apps.associateBy { it.component }
+        return apps
     }
 }

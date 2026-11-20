@@ -1,0 +1,5 @@
+Organize a home screen across pages, search installed apps and place widgets.
+
+Arrange apps, folders and resizable widgets on a flexible home screen.
+
+Requires Android API 26 or later.

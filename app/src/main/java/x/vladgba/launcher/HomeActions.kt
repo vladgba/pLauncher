@@ -20,6 +20,7 @@ import android.view.accessibility.AccessibilityEvent
  */
 enum class HomeAction(val key: String, val label: String) {
     NONE("none", "Nothing"),
+    DRAWER("drawer", "Open app drawer"),
     LOCK("lock", "Lock screen"),
     NOTIFICATIONS("notifications", "Expand notifications"),
     QUICK_SETTINGS("quick_settings", "Expand quick settings");
@@ -64,6 +65,7 @@ object HomeActions {
         val svc = LauncherAccessibilityService.instance
         when (action) {
             HomeAction.NONE -> {}
+            HomeAction.DRAWER -> (a as? LauncherActivity)?.openAppDrawer()
 
             HomeAction.LOCK -> when {
                 // Preferred: keeps fingerprint/face unlock available.

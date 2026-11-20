@@ -3,6 +3,8 @@ package x.vladgba.launcher.model
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.util.AtomicFile
 import android.util.Log
@@ -37,17 +39,42 @@ class WorkspaceStore(context: Context) {
 }
 
 /** [updated] = package lastUpdateTime, used to tell whether a cached icon is stale. */
-class AppInfo(val component: String, val label: String, val icon: Drawable, val updated: Long = 0L) {
+class AppInfo(val component: String, val label: String, var icon: Drawable, val updated: Long = 0L) {
     val componentName: ComponentName get() = ComponentName.unflattenFromString(component)!!
     val packageName: String get() = componentName.packageName
 }
 
-/** Queries launchable activities. Safe to call off the main thread. */
+/**
+ * Queries launchable activities. Safe to call off the main thread.
+ *
+ * Every returned icon is normalized to the shared icon edge (see IconBitmaps),
+ * so memory holds one small bitmap per app instead of whatever size each app
+ * shipped. The store is process-wide: a second repository (e.g. the search
+ * overlay) reuses the icons instead of loading them all again.
+ */
 class AppRepository(private val context: Context) {
-    private var previous: Map<String, AppInfo> = emptyMap()
-
-    fun query(): List<AppInfo> {
+    fun query(
+        compression: Int = 1,
+        colorDepth: String = "32",
+        neededComponents: Set<String>? = null
+    ): List<AppInfo> {
         val pm = context.packageManager
+        val res = context.resources
+        val edge = IconBitmaps.iconEdgePx(res.displayMetrics.density, compression)
+        val cacheKey = "$edge-$colorDepth"
+        if (previousKey != cacheKey) {
+            previous = emptyMap()
+            previousKey = cacheKey
+        }
+        if (labels.isEmpty()) {
+            try {
+                labels.putAll(IconCache(context).loadLabels())
+            } catch (_: Exception) {}
+        }
+        val diskIcons = if (neededComponents != null && previous.isEmpty()) {
+            try { IconCache(context).loadDisk(compression) } catch (_: Exception) { emptyMap() }
+        } else emptyMap()
+
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val updated = HashMap<String, Long>()
         val apps = pm.queryIntentActivities(intent, 0)
@@ -58,16 +85,58 @@ class AppRepository(private val context: Context) {
                     try { pm.getPackageInfo(ai.packageName, 0).lastUpdateTime } catch (_: Exception) { 0L }
                 }
                 val component = ComponentName(ai.packageName, ai.name).flattenToString()
-                val cached = previous[component]?.takeIf { time != 0L && it.updated == time }
+                val isNeeded = neededComponents == null || component in neededComponents
+                val cached = previous[component]?.takeIf { time != 0L && it.updated == time && it.icon !== placeholder }
+                val icon = if (isNeeded) {
+                    cached?.icon
+                        ?: diskIcons[component]?.takeIf { it.updated == time && it.icon !== placeholder }?.icon
+                        ?: IconBitmaps.render(res, it.loadIcon(pm), edge, colorDepth)
+                } else {
+                    cached?.icon ?: placeholder
+                }
+                val cachedLabel = labels[component]?.takeIf { it.first == time && it.second.isNotEmpty() }?.second
+                val label = cachedLabel ?: (ai.nonLocalizedLabel?.toString() ?: it.loadLabel(pm).toString()).also { str ->
+                    labels[component] = Pair(time, str)
+                }
                 AppInfo(
                     component,
-                    it.loadLabel(pm).toString(),
-                    cached?.icon ?: it.loadIcon(pm),
+                    label,
+                    icon,
                     time
                 )
             }
             .sortedBy { it.label.lowercase() }
-        previous = apps.associateBy { it.component }
+        previous = apps.filter { it.icon !== placeholder }.associateBy { it.component }
         return apps
+    }
+
+    fun loadIcon(component: String, compression: Int = 1, colorDepth: String = "32"): Drawable? = try {
+        val cn = ComponentName.unflattenFromString(component) ?: return null
+        val pm = context.packageManager
+        val res = context.resources
+        val edge = IconBitmaps.iconEdgePx(res.displayMetrics.density, compression)
+        val raw = pm.getActivityIcon(cn)
+        val rendered = IconBitmaps.render(res, raw, edge, colorDepth)
+        val current = previous.toMutableMap()
+        current[component]?.let { it.icon = rendered }
+        previous = current
+        rendered
+    } catch (_: Exception) { null }
+
+    fun query(compression: Int): List<AppInfo> = query(compression, "32", null)
+    fun query(aggressive: Boolean): List<AppInfo> = query(if (aggressive) 2 else 1, "32", null)
+
+    companion object {
+        private var previous: Map<String, AppInfo> = emptyMap()
+        private var previousKey: String = ""
+        private val labels = HashMap<String, Pair<Long, String>>()
+
+        val placeholder: Drawable = ColorDrawable(Color.TRANSPARENT)
+
+        /** Drops every cached icon so the next query re-renders them. Called on low memory. */
+        fun releaseIcons() {
+            previous = emptyMap()
+            previousKey = ""
+        }
     }
 }

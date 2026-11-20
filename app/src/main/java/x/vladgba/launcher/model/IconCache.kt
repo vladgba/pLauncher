@@ -11,7 +11,6 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.lang.ref.WeakReference
-import kotlin.math.roundToInt
 
 /**
  * Keeps app icons + labels so the home screen is never drawn with empty icons.
@@ -31,7 +30,7 @@ class IconCache(context: Context) {
     private val dir = File(context.filesDir, "icon_cache").apply { mkdirs() }
     private val index = AtomicFile(File(dir, "index.json"))
     /** Bitmap edge: allows enlarged icons on dense displays. */
-    private val sizePx = (96 * res.displayMetrics.density).roundToInt().coerceIn(96, 384)
+    private fun sizePx(compression: Int = 1) = IconBitmaps.iconEdgePx(res.displayMetrics.density, compression)
 
     /** Instant: last list loaded in this process, or empty. */
     fun memory(): Map<String, AppInfo> = memoryCache.mapNotNull { (key, value) ->
@@ -39,31 +38,49 @@ class IconCache(context: Context) {
     }.toMap()
 
     /** Reads the disk cache. Call on the main thread before the first bind (fast: small PNGs). */
-    fun loadDisk(): Map<String, AppInfo> {
+    fun loadDisk(compression: Int = 1): Map<String, AppInfo> {
         val idx = readIndex() ?: return emptyMap()
         val out = HashMap<String, AppInfo>()
+        val edge = sizePx(compression)
         for (component in idx.keys()) {
             val e = idx.optJSONObject(component) ?: continue
             val f = File(dir, e.optString("file"))
-            val bmp = IconBitmaps.decodeFile(f, sizePx) ?: continue
+            val bmp = IconBitmaps.decodeFile(f, edge) ?: continue
             out[component] = AppInfo(component, e.optString("label"), BitmapDrawable(res, bmp), e.optLong("updated"))
         }
         return out
     }
 
+    /** Fast label index: reads cached labels and timestamps without decoding any PNGs. */
+    fun loadLabels(): Map<String, Pair<Long, String>> {
+        val idx = readIndex() ?: return emptyMap()
+        val out = HashMap<String, Pair<Long, String>>()
+        for (component in idx.keys()) {
+            val e = idx.optJSONObject(component) ?: continue
+            val l = e.optString("label")
+            if (l.isNotEmpty()) {
+                out[component] = Pair(e.optLong("updated"), l)
+            }
+        }
+        return out
+    }
+
+    fun loadDisk(aggressive: Boolean): Map<String, AppInfo> = loadDisk(if (aggressive) 2 else 1)
+
     /** Remembers the fresh list and writes changed icons to disk. Call off the main thread. */
-    fun store(apps: List<AppInfo>) {
+    fun store(apps: List<AppInfo>, compression: Int = 1) {
         memoryCache = apps.associate { it.component to WeakReference(it) }
         val old = readIndex() ?: JSONObject()
         val idx = JSONObject()
         val keep = HashSet<String>()
+        val edge = sizePx(compression)
         for (a in apps) {
             val name = fileName(a.component)
             keep += name
             val prev = old.optJSONObject(a.component)
             val file = File(dir, name)
             val fresh = prev != null && prev.optLong("updated") == a.updated && a.updated != 0L && file.exists()
-            if (!fresh && !writePng(a, file)) continue
+            if (!fresh && !writePng(a, file, edge)) continue
             idx.put(a.component, JSONObject()
                 .put("label", a.label).put("file", name).put("updated", a.updated))
         }
@@ -78,14 +95,26 @@ class IconCache(context: Context) {
         }
     }
 
-    private fun writePng(a: AppInfo, file: File): Boolean = try {
-        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        val d = a.icon.constantState?.newDrawable(res)?.mutate() ?: a.icon
-        d.setBounds(0, 0, sizePx, sizePx)
-        d.draw(Canvas(bmp))
+    fun store(apps: List<AppInfo>, aggressive: Boolean) = store(apps, if (aggressive) 2 else 1)
+
+    private fun writePng(a: AppInfo, file: File, edge: Int): Boolean = try {
+        // Icons from AppRepository are already normalized to sizePx: compress that
+        // shared bitmap directly instead of drawing a second full-size copy.
+        val live = (a.icon as? BitmapDrawable)?.bitmap?.takeIf { !it.isRecycled }
+        val bmp = when {
+            live != null && live.width == edge && live.height == edge -> live
+            live != null -> Bitmap.createScaledBitmap(live, edge, edge, true)
+            else -> {
+                val b = Bitmap.createBitmap(edge, edge, Bitmap.Config.ARGB_8888)
+                val d = a.icon.constantState?.newDrawable(res)?.mutate() ?: a.icon
+                d.setBounds(0, 0, edge, edge)
+                d.draw(Canvas(b))
+                b
+            }
+        }
         val tmp = File(dir, file.name + ".tmp")
         FileOutputStream(tmp).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bmp.recycle()
+        if (bmp !== live) bmp.recycle()
         tmp.renameTo(file)
     } catch (e: Exception) {
         Log.w("pLauncher", "icon cache write failed for ${a.component}", e)

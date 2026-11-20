@@ -49,6 +49,9 @@ class WorkspaceView(context: Context, private val dragLayer: FrameLayout) : View
         fun onEmptyLongPress(x: Float, y: Float)
         /** Item was dropped at a new place. [intoFolder] is set when an app was dropped onto a folder. */
         fun onItemDropped(item: HomeItem, intoFolder: FolderItem?)
+        /** Returns true when an app was dropped onto the dock instead of a home page. */
+        fun onDockDrop(item: HomeItem, rawX: Float, rawY: Float): Boolean
+        fun isDockHover(rawX: Float, rawY: Float): Boolean
         fun onPageChanged(px: Int, py: Int)
         /** Does this app have a swipe action for [dir] (up/right/down/left)? */
         fun hasIconGesture(item: AppItem, dir: String): Boolean
@@ -102,6 +105,8 @@ class WorkspaceView(context: Context, private val dragLayer: FrameLayout) : View
     private var dragOffY = 0f
     private var dragStartRawX = 0f
     private var dragStartRawY = 0f
+    private var dragRawX = 0f
+    private var dragRawY = 0f
     private var dragMoved = false
     private val dragLayerLoc = IntArray(2)
     private var edgeDir = 0          // 1=left 2=right 3=up 4=down
@@ -463,6 +468,7 @@ class WorkspaceView(context: Context, private val dragLayer: FrameLayout) : View
         dragOffY = screenDownY - loc[1]
         dragStartRawX = screenDownX
         dragStartRawY = screenDownY
+        dragRawX = screenDownX; dragRawY = screenDownY
         dragItem = item
         dragView = v
         dragMoved = false
@@ -475,12 +481,18 @@ class WorkspaceView(context: Context, private val dragLayer: FrameLayout) : View
 
     private fun moveDrag(rawX: Float, rawY: Float) {
         val v = dragView ?: return
+        dragRawX = rawX; dragRawY = rawY
         if (!dragMoved && hypot(rawX - dragStartRawX, rawY - dragStartRawY) > touchSlop) dragMoved = true
         val x = rawX - dragLayerLoc[0]
         val y = rawY - dragLayerLoc[1]
         v.x = x - dragOffX
         v.y = y - dragOffY
-        if (dragMoved) updateEdge(x, y)
+        if (dragMoved) {
+            if (dragItem is AppItem && callbacks.isDockHover(rawX, rawY)) {
+                edgeDir = 0
+                removeCallbacks(edgeFlip)
+            } else updateEdge(x, y)
+        }
     }
 
     private fun updateEdge(x: Float, y: Float) {
@@ -567,6 +579,13 @@ class WorkspaceView(context: Context, private val dragLayer: FrameLayout) : View
         dragLayer.removeView(v)
         v.translationX = 0f; v.translationY = 0f
 
+        if (dragMoved && !cancelling && (item is AppItem || item is FolderItem) &&
+            callbacks.onDockDrop(item, dragRawX, dragRawY)) {
+            external = false
+            if (pendingSync) { pendingSync = false; sync() }
+            return
+        }
+
         if (external) {
             external = false
             callbacks.onExternalDrop(item, folder, cancelled = cancelling || !dragMoved)
@@ -613,6 +632,7 @@ class WorkspaceView(context: Context, private val dragLayer: FrameLayout) : View
         v.translationY = rawY - dragLayerLoc[1] - dragOffY
         v.alpha = 0.9f
         dragStartRawX = rawX; dragStartRawY = rawY
+        dragRawX = rawX; dragRawY = rawY
         dragItem = item
         dragView = v
         dragMoved = true

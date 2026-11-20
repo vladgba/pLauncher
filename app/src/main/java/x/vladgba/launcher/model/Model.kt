@@ -125,7 +125,20 @@ class LauncherConfig {
     var pagesX = 3         // page matrix width  (left/right swipe)
     var pagesY = 2         // page matrix height (up/down swipe)
     var showLabels = true
+    var labelShadow = true
+    var labelShadowStrength = 4 // 1..5
     var iconScale = 100    // percent
+    var labelSize = 12       // sp
+    var labelPosition = "below" // below | overlay
+    var edgePadding = 0      // dp, in addition to system insets
+    var widgetCornerRadius = 0 // dp
+    var indicatorStyle = "dots" // dots | numbers | hidden
+    var indicatorSize = 6     // dp
+    var dockEnabled = true
+    var dockColumns = 5       // icons visible per dock page
+    var dockPages = 3         // minimum number of swipeable dock pages
+    var dockHeight = 72       // dp
+    var newAppLocation = "home" // home | drawer
     var homeX = 0          // default page: where Home returns to
     var folderColumns = 4  // folder popup grid
     var folderRows = 4     // rows visible before the folder scrolls
@@ -133,20 +146,38 @@ class LauncherConfig {
     var layoutLocked = false // no moving, resizing, adding or removing items
     var homeAction = "none" // Home pressed on the default page: none | lock | notifications | quick_settings
     var homeY = 0
-    var iconShape = "system" // system | square | rounded
+    var iconShape = "system" // original icon or a launcher mask
     var snapNewWidgets = false // widgets added from the picker start fixed to the grid
     var searchBar = "top"      // app search overlay: bar at the top | bottom
     var searchMode = "big"     // app search overlay: big | compact
+    var aggressiveMemory = false // drops icon resolution and clears caches when backgrounded
+    var iconCompression = 1      // 1 (1x - full), 2 (2x downscale), 4 (4x downscale)
+    var lazyIcons = true         // only load icons for apps placed on the home screen
+    var colorDepth = "32"        // "32" (32-bit ARGB_8888), "16" (16-bit RGB_565), "4" (4-bit per channel)
+    var softwareRendering = false // disables GPU Vulkan swapchain
+    val effectiveCompression: Int get() = if (iconCompression > 1) iconCompression else if (aggressiveMemory) 2 else 1
 
     fun toJson(): JSONObject = JSONObject()
         .put("columns", columns).put("rows", rows)
         .put("pagesX", pagesX).put("pagesY", pagesY)
-        .put("showLabels", showLabels).put("iconScale", iconScale)
+        .put("showLabels", showLabels).put("labelShadow", labelShadow)
+        .put("labelShadowStrength", labelShadowStrength).put("iconScale", iconScale)
+        .put("labelSize", labelSize).put("labelPosition", labelPosition)
+        .put("edgePadding", edgePadding).put("widgetCornerRadius", widgetCornerRadius)
+        .put("indicatorStyle", indicatorStyle).put("indicatorSize", indicatorSize)
+        .put("dockEnabled", dockEnabled).put("dockColumns", dockColumns)
+        .put("dockPages", dockPages).put("dockHeight", dockHeight)
+        .put("newAppLocation", newAppLocation)
         .put("homeX", homeX).put("homeY", homeY)
         .put("folderColumns", folderColumns).put("folderRows", folderRows)
         .put("homeAction", homeAction).put("layoutLocked", layoutLocked).put("colorMode", colorMode)
         .put("iconShape", iconShape).put("snapNewWidgets", snapNewWidgets)
         .put("searchBar", searchBar).put("searchMode", searchMode)
+        .put("aggressiveMemory", aggressiveMemory)
+        .put("iconCompression", iconCompression)
+        .put("lazyIcons", lazyIcons)
+        .put("colorDepth", colorDepth)
+        .put("softwareRendering", softwareRendering)
 
     fun readJson(o: JSONObject) {
         columns = o.optInt("columns", columns).coerceIn(MIN_GRID, MAX_GRID)
@@ -154,7 +185,20 @@ class LauncherConfig {
         pagesX = o.optInt("pagesX", pagesX).coerceIn(1, MAX_PAGES)
         pagesY = o.optInt("pagesY", pagesY).coerceIn(1, MAX_PAGES)
         showLabels = o.optBoolean("showLabels", showLabels)
+        labelShadow = o.optBoolean("labelShadow", labelShadow)
+        labelShadowStrength = o.optInt("labelShadowStrength", labelShadowStrength).coerceIn(1, 5)
         iconScale = o.optInt("iconScale", iconScale).coerceIn(50, 150)
+        labelSize = o.optInt("labelSize", labelSize).coerceIn(8, 24)
+        labelPosition = o.optString("labelPosition", labelPosition).takeIf { it in listOf("below", "overlay") } ?: "below"
+        edgePadding = o.optInt("edgePadding", edgePadding).coerceIn(0, 48)
+        widgetCornerRadius = o.optInt("widgetCornerRadius", widgetCornerRadius).coerceIn(0, 48)
+        indicatorStyle = o.optString("indicatorStyle", indicatorStyle).takeIf { it in listOf("dots", "numbers", "hidden") } ?: "dots"
+        indicatorSize = o.optInt("indicatorSize", indicatorSize).coerceIn(4, 16)
+        dockEnabled = o.optBoolean("dockEnabled", dockEnabled)
+        dockColumns = o.optInt("dockColumns", dockColumns).coerceIn(3, 10)
+        dockPages = o.optInt("dockPages", dockPages).coerceIn(1, MAX_PAGES)
+        dockHeight = o.optInt("dockHeight", dockHeight).coerceIn(48, 160)
+        newAppLocation = o.optString("newAppLocation", newAppLocation).takeIf { it in listOf("home", "drawer") } ?: "home"
         folderColumns = o.optInt("folderColumns", folderColumns).coerceIn(MIN_FOLDER_GRID, MAX_FOLDER_GRID)
         folderRows = o.optInt("folderRows", folderRows).coerceIn(MIN_FOLDER_GRID, MAX_FOLDER_GRID)
         homeAction = o.optString("homeAction", homeAction)
@@ -164,6 +208,11 @@ class LauncherConfig {
         snapNewWidgets = o.optBoolean("snapNewWidgets", snapNewWidgets)
         searchBar = o.optString("searchBar", searchBar).takeIf { it in SEARCH_BARS } ?: "top"
         searchMode = o.optString("searchMode", searchMode).takeIf { it in SEARCH_MODES } ?: "big"
+        aggressiveMemory = o.optBoolean("aggressiveMemory", aggressiveMemory)
+        iconCompression = o.optInt("iconCompression", iconCompression).takeIf { it in ICON_COMPRESSIONS } ?: 1
+        lazyIcons = o.optBoolean("lazyIcons", lazyIcons)
+        colorDepth = o.optString("colorDepth", colorDepth).takeIf { it in COLOR_DEPTHS } ?: "32"
+        softwareRendering = o.optBoolean("softwareRendering", softwareRendering)
         homeX = o.optInt("homeX", homeX).coerceIn(0, pagesX - 1)
         homeY = o.optInt("homeY", homeY).coerceIn(0, pagesY - 1)
     }
@@ -174,9 +223,13 @@ class LauncherConfig {
         const val MAX_PAGES = 12
         const val MIN_FOLDER_GRID = 1
         const val MAX_FOLDER_GRID = 8
-        val ICON_SHAPES = listOf("system", "square", "rounded")
+        val ICON_SHAPES = listOf("system", "square", "rounded", "round", "squircle",
+            "flower", "teardrop", "pebble", "vessel", "pentagon", "hexagon",
+            "heptagon", "octagon")
         val SEARCH_BARS = listOf("top", "bottom")
         val SEARCH_MODES = listOf("big", "compact")
+        val ICON_COMPRESSIONS = listOf(1, 2, 4)
+        val COLOR_DEPTHS = listOf("32", "16", "4")
     }
 }
 
@@ -194,8 +247,19 @@ class WorkspaceModel {
      */
     val gestures = HashMap<String, HashMap<String, String>>()
 
-    /** Components hidden from the home screen (still launchable via swipe gestures). */
+    /** Components hidden from home and dock, available in the app drawer. */
     val hidden = HashSet<String>()
+    /** Apps intentionally kept in the drawer instead of being placed on home pages. */
+    val drawerOnly = HashSet<String>()
+    /** Apps and folders pinned to the dock, ordered across horizontally scrollable pages. */
+    val dock = ArrayList<String>()
+    val dockFolders = ArrayList<FolderItem>()
+
+    fun dockFolder(entry: String): FolderItem? {
+        if (!entry.startsWith("folder:")) return null
+        val id = entry.removePrefix("folder:").toLongOrNull() ?: return null
+        return dockFolders.firstOrNull { it.id == id }
+    }
 
     /** Per-app label override (component → text). */
     val customLabels = HashMap<String, String>()
@@ -229,6 +293,21 @@ class WorkspaceModel {
     fun widgets() = items.filterIsInstance<WidgetItem>()
     fun folders() = items.filterIsInstance<FolderItem>()
 
+    fun allPlacedComponents(): Set<String> {
+        val set = HashSet<String>()
+        for (item in items) {
+            when (item) {
+                is AppItem -> set.add(item.component)
+                is FolderItem -> set.addAll(item.apps)
+                else -> {}
+            }
+        }
+        set.addAll(customIcons.keys)
+        for (c in dock) if (c.isNotEmpty() && !c.startsWith("folder:")) set.add(c)
+        for (f in dockFolders) set.addAll(f.apps)
+        return set
+    }
+
     /** Topmost folder whose area (large folders cover several cells) includes the cell. */
     fun folderAt(px: Int, py: Int, cx: Int, cy: Int): FolderItem? = items
         .filterIsInstance<FolderItem>()
@@ -243,9 +322,9 @@ class WorkspaceModel {
     }
 
     /**
-     * Makes the model match the installed apps: removes uninstalled apps
-     * (also from folders), adds new ones to free cells. Every installed app
-     * ends up on the home screen, either directly or inside a folder.
+     * Makes the home pages match the supplied installed components: removes
+     * unavailable apps and adds missing ones to free cells. Dock and hidden
+     * components are excluded by the caller.
      *
      * @param installed components sorted in the order new apps should be placed
      * @return true if anything changed
@@ -423,6 +502,11 @@ class WorkspaceModel {
         return JSONObject().put("version", 1).put("nextId", nextId)
             .put("config", config.toJson()).put("items", arr)
             .put("hidden", JSONArray(hidden.sorted()))
+            .put("drawerOnly", JSONArray(drawerOnly.sorted()))
+            .put("dock", JSONArray(dock))
+            .put("dockFolders", JSONArray().apply {
+                for (f in dockFolders) put(JSONObject().put("id", f.id).put("title", f.title).put("apps", JSONArray(f.apps)))
+            })
             .put("customLabels", JSONObject(customLabels as Map<*, *>))
             .put("customIcons", JSONObject(customIcons as Map<*, *>))
             .put("gestures", JSONObject().apply {
@@ -435,6 +519,16 @@ class WorkspaceModel {
             val m = WorkspaceModel()
             root.optJSONObject("config")?.let { m.config.readJson(it) }
             root.optJSONArray("hidden")?.let { h -> for (i in 0 until h.length()) m.hidden += h.getString(i) }
+            root.optJSONArray("drawerOnly")?.let { d -> for (i in 0 until d.length()) m.drawerOnly += d.getString(i) }
+            root.optJSONArray("dock")?.let { d -> for (i in 0 until d.length()) m.dock += d.getString(i) }
+            root.optJSONArray("dockFolders")?.let { df ->
+                for (i in 0 until df.length()) {
+                    val o = df.getJSONObject(i)
+                    val apps = ArrayList<String>()
+                    o.optJSONArray("apps")?.let { a -> for (j in 0 until a.length()) apps += a.getString(j) }
+                    m.dockFolders += FolderItem(o.getLong("id"), o.optString("title", "Folder"), apps)
+                }
+            }
             root.optJSONObject("customLabels")?.let { o -> for (k in o.keys()) m.customLabels[k] = o.getString(k) }
             root.optJSONObject("customIcons")?.let { o -> for (k in o.keys()) m.customIcons[k] = o.getString(k) }
             root.optJSONObject("gestures")?.let { g ->

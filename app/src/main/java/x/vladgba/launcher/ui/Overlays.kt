@@ -176,13 +176,21 @@ class PageIndicator(context: Context) : View(context) {
     var pagesX = 1; var pagesY = 1
     var curX = 0; var curY = 0
     var homeX = 0; var homeY = 0
-    private val dot = context.dp(6f)
-    private val gap = context.dp(5f)
+    var style = "dots"
+        set(value) { field = value; requestLayout(); invalidate() }
+    var sizeDp = 6
+        set(value) { field = value; requestLayout(); invalidate() }
+    private val dot get() = context.dp(sizeDp.toFloat())
+    private val gap get() = context.dp(5f)
     private val on = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
     private val off = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66FFFFFF }
     /** Ring around the default (home) page dot. */
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFFFFFFF.toInt(); style = Paint.Style.STROKE; strokeWidth = context.dp(1.2f)
+    }
+    private val numberPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        textSize = context.dp(13f)
     }
 
     fun update(px: Int, py: Int, cx: Int, cy: Int, hx: Int = homeX, hy: Int = homeY) {
@@ -194,6 +202,14 @@ class PageIndicator(context: Context) : View(context) {
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (style == "hidden") { setMeasuredDimension(0, 0); return }
+        if (style == "numbers") {
+            numberPaint.textSize = context.dp((sizeDp + 7).toFloat())
+            val total = pagesX * pagesY
+            setMeasuredDimension((numberPaint.measureText("$total / $total") + context.dp(12f)).roundToInt(),
+                (numberPaint.textSize * 1.6f).roundToInt())
+            return
+        }
         setMeasuredDimension(
             (pagesX * dot + (pagesX - 1) * gap + gap * 2).roundToInt(),
             (pagesY * dot + (pagesY - 1) * gap + gap * 2).roundToInt()
@@ -201,7 +217,14 @@ class PageIndicator(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (pagesX * pagesY <= 1) return
+        if (style == "hidden" || pagesX * pagesY <= 1) return
+        if (style == "numbers") {
+            numberPaint.textSize = context.dp((sizeDp + 7).toFloat())
+            numberPaint.color = Palette.dotOn
+            canvas.drawText("${curY * pagesX + curX + 1} / ${pagesX * pagesY}",
+                width / 2f, height / 2f - (numberPaint.ascent() + numberPaint.descent()) / 2f, numberPaint)
+            return
+        }
         on.color = Palette.dotOn; ring.color = Palette.dotOn; off.color = Palette.dotOff
         for (y in 0 until pagesY) for (x in 0 until pagesX) {
             val cx = gap + x * (dot + gap) + dot / 2

@@ -87,22 +87,80 @@ object Dialogs {
         val px = picker("Pages horizontally (← →)", 1, LauncherConfig.MAX_PAGES, cfg.pagesX)
         val py = picker("Pages vertically (↑ ↓)", 1, LauncherConfig.MAX_PAGES, cfg.pagesY)
         val scale = picker("Icon size %", 50, 150, cfg.iconScale)
+        val labelSize = picker("Icon label size (sp)", 8, 24, cfg.labelSize)
+        val edgePadding = picker("Home screen edge padding (dp)", 0, 48, cfg.edgePadding)
+        val cornerRadius = picker("Widget corner radius (dp)", 0, 48, cfg.widgetCornerRadius)
+        val indicatorSize = picker("Page indicator size (dp)", 4, 16, cfg.indicatorSize)
+        val dockColumns = picker("Dock icons per page", 3, 10, cfg.dockColumns)
+        val dockPages = picker("Dock pages", 1, LauncherConfig.MAX_PAGES, cfg.dockPages)
+        val dockHeight = picker("Dock height (dp)", 48, 160, cfg.dockHeight)
         val fcols = picker("Folder columns", LauncherConfig.MIN_FOLDER_GRID, LauncherConfig.MAX_FOLDER_GRID, cfg.folderColumns)
         val frows = picker("Folder rows (then scroll)", LauncherConfig.MIN_FOLDER_GRID, LauncherConfig.MAX_FOLDER_GRID, cfg.folderRows)
         val labels = CheckBox(ctx).apply { text = "Show app labels"; isChecked = cfg.showLabels }
         col.addView(labels)
+        val labelShadow = CheckBox(ctx).apply { text = "Shadow behind app labels"; isChecked = cfg.labelShadow }
+        col.addView(labelShadow)
+        val shadowStrength = picker("Label shadow strength", 1, 5, cfg.labelShadowStrength)
+        shadowStrength.bar.isEnabled = labelShadow.isChecked
+        labelShadow.setOnCheckedChangeListener { _, checked -> shadowStrength.bar.isEnabled = checked }
+        val dockEnabled = CheckBox(ctx).apply { text = "Show dock"; isChecked = cfg.dockEnabled }
+        col.addView(dockEnabled)
         val snapWidgets = CheckBox(ctx).apply {
             text = "Fix new widgets to grid"; isChecked = cfg.snapNewWidgets
         }
         col.addView(snapWidgets)
+        val aggressiveMemory = CheckBox(ctx).apply {
+            text = "Aggressive RAM optimization"; isChecked = cfg.aggressiveMemory
+        }
+        col.addView(aggressiveMemory)
+        val lazyIcons = CheckBox(ctx).apply {
+            text = "Lazy icon loading (Home screen only)"; isChecked = cfg.lazyIcons
+        }
+        col.addView(lazyIcons)
+        val softwareRendering = CheckBox(ctx).apply {
+            text = "Software rendering (Low RAM mode)"; isChecked = cfg.softwareRendering
+        }
+        col.addView(softwareRendering)
+
+        // Icon compression
+        col.addView(TextView(ctx).apply {
+            text = "Icon compression"; textSize = 16f
+            setPadding(0, a.dpi(16f), 0, a.dpi(4f))
+        })
+        val compressions = listOf(1 to "Off (1x)", 2 to "2x", 4 to "4x")
+        val compressionGroup = RadioGroup(ctx).apply { orientation = RadioGroup.HORIZONTAL }
+        for ((factor, name) in compressions) compressionGroup.addView(RadioButton(ctx).apply {
+            id = View.generateViewId(); text = name; tag = factor
+            isChecked = factor == cfg.iconCompression
+            setPadding(0, 0, a.dpi(12f), 0)
+        })
+        col.addView(compressionGroup)
+
+        // Color depth
+        col.addView(TextView(ctx).apply {
+            text = "Icon color depth"; textSize = 16f
+            setPadding(0, a.dpi(16f), 0, a.dpi(4f))
+        })
+        val depths = listOf("32" to "32-bit (Full)", "16" to "16-bit (Low RAM)", "4" to "4-bit (Aggressive)")
+        val depthGroup = RadioGroup(ctx).apply { orientation = RadioGroup.HORIZONTAL }
+        for ((key, name) in depths) depthGroup.addView(RadioButton(ctx).apply {
+            id = View.generateViewId(); text = name; tag = key
+            isChecked = key == cfg.colorDepth
+            setPadding(0, 0, a.dpi(12f), 0)
+        })
+        col.addView(depthGroup)
 
         // Icon shape
         col.addView(TextView(ctx).apply {
             text = "Icon shape"; textSize = 16f
             setPadding(0, a.dpi(16f), 0, a.dpi(4f))
         })
-        val shapes = listOf("system" to "Original", "square" to "Square", "rounded" to "Rounded")
-        val shapeGroup = RadioGroup(ctx).apply { orientation = RadioGroup.HORIZONTAL }
+        val shapes = listOf("system" to "Original", "square" to "Square", "rounded" to "Rounded square",
+            "round" to "Round", "squircle" to "Squircle", "flower" to "Flower",
+            "teardrop" to "Teardrop", "pebble" to "Pebble", "vessel" to "Vessel",
+            "pentagon" to "Pentagon", "hexagon" to "Hexagon", "heptagon" to "Heptagon",
+            "octagon" to "Octagon")
+        val shapeGroup = RadioGroup(ctx).apply { orientation = RadioGroup.VERTICAL }
         for ((key, name) in shapes) shapeGroup.addView(RadioButton(ctx).apply {
             id = View.generateViewId(); text = name; tag = key
             isChecked = key == cfg.iconShape
@@ -143,6 +201,11 @@ object Dialogs {
             .firstOrNull { it.isChecked }?.tag as? String ?: fallback
         val searchBarGroup = choice("Search bar position", listOf("top" to "Top", "bottom" to "Bottom"), cfg.searchBar)
         val searchModeGroup = choice("Search size", listOf("big" to "Big", "compact" to "Compact"), cfg.searchMode)
+        val labelPositionGroup = choice("Icon label placement",
+            listOf("below" to "Below icon", "overlay" to "On icon"), cfg.labelPosition)
+        val indicatorGroup = choice("Page indicator",
+            listOf("dots" to "Dots", "numbers" to "Numbers", "hidden" to "Hidden"), cfg.indicatorStyle)
+        val newAppGroup = choice("New apps", listOf("home" to "Home screen", "drawer" to "App drawer"), cfg.newAppLocation)
 
         // Home button on the default page
         col.addView(TextView(ctx).apply {
@@ -198,6 +261,19 @@ object Dialogs {
                 cfg.columns = cols.value; cfg.rows = rows.value
                 cfg.pagesX = px.value; cfg.pagesY = py.value
                 cfg.iconScale = scale.value; cfg.showLabels = labels.isChecked
+                cfg.labelShadow = labelShadow.isChecked
+                cfg.labelShadowStrength = shadowStrength.value
+                cfg.labelSize = labelSize.value
+                cfg.labelPosition = labelPositionGroup.picked("below")
+                cfg.edgePadding = edgePadding.value
+                cfg.widgetCornerRadius = cornerRadius.value
+                cfg.indicatorStyle = indicatorGroup.picked("dots")
+                cfg.indicatorSize = indicatorSize.value
+                cfg.newAppLocation = newAppGroup.picked("home")
+                cfg.dockEnabled = dockEnabled.isChecked
+                cfg.dockColumns = dockColumns.value
+                cfg.dockPages = dockPages.value
+                cfg.dockHeight = dockHeight.value
                 cfg.snapNewWidgets = snapWidgets.isChecked
                 cfg.iconShape = (0 until shapeGroup.childCount).map { shapeGroup.getChildAt(it) as RadioButton }
                     .firstOrNull { it.isChecked }?.tag as? String ?: "system"
@@ -209,6 +285,30 @@ object Dialogs {
                 cfg.searchMode = searchModeGroup.picked("big")
                 cfg.colorMode = (0 until modeGroup.childCount).map { modeGroup.getChildAt(it) as RadioButton }
                     .firstOrNull { it.isChecked }?.tag as? String ?: "system"
+                val wasAggressive = cfg.aggressiveMemory
+                val wasCompression = cfg.iconCompression
+                val wasLazy = cfg.lazyIcons
+                val wasColorDepth = cfg.colorDepth
+                val wasSoftware = cfg.softwareRendering
+                cfg.aggressiveMemory = aggressiveMemory.isChecked
+                cfg.lazyIcons = lazyIcons.isChecked
+                cfg.softwareRendering = softwareRendering.isChecked
+                cfg.iconCompression = (0 until compressionGroup.childCount)
+                    .map { compressionGroup.getChildAt(it) as RadioButton }
+                    .firstOrNull { it.isChecked }?.tag as? Int ?: 1
+                cfg.colorDepth = (0 until depthGroup.childCount)
+                    .map { depthGroup.getChildAt(it) as RadioButton }
+                    .firstOrNull { it.isChecked }?.tag as? String ?: "32"
+                if (wasSoftware != cfg.softwareRendering) {
+                    a.toast("Restarting to apply rendering mode")
+                    a.save()
+                    a.finishAffinity()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                } else if (wasAggressive != cfg.aggressiveMemory || wasCompression != cfg.iconCompression ||
+                    wasLazy != cfg.lazyIcons || wasColorDepth != cfg.colorDepth) {
+                    a.trimMemoryAggressively()
+                    a.reloadApps()
+                }
                 onApply()
             }
             .show()
@@ -484,7 +584,7 @@ object Dialogs {
         val list = a.apps.values.sortedBy { it.label.lowercase() }
         val b = builder(a)
         b.setTitle(title)
-            .setAdapter(iconAdapter(b.context, list.map { it.icon to it.label })) { _, i -> onPick(list[i].component) }
+            .setAdapter(iconAdapter(b.context, list.map { (a.iconFor(it.component) ?: it.icon) to it.label })) { _, i -> onPick(list[i].component) }
             .setNegativeButton(android.R.string.cancel) { _, _ -> onCancel() }
             .show()
     }

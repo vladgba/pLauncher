@@ -148,10 +148,11 @@ class SearchActivity : Activity() {
         })
         setContentView(root)
         root.pPadForSystemBars()
+        focusSearchBar()
         refilter()
 
         io.execute {
-            val apps = try { AppRepository(this).query() } catch (_: Exception) { emptyList() }
+            val apps = try { AppRepository(this).query(cfg.effectiveCompression, cfg.colorDepth, null) } catch (_: Exception) { emptyList() }
             runOnUiThread { if (!isDestroyed) { allApps = apps; refilter() } }
         }
     }
@@ -160,10 +161,17 @@ class SearchActivity : Activity() {
         super.onNewIntent(intent)
         // Widget tapped again while open: start over with a clean field.
         input.setText("")
-        input.requestFocus()
+        focusSearchBar()
     }
 
     override fun onDestroy() {
+        allApps = emptyList()
+        matches = emptyList()
+        shown = emptyList()
+        if (cfg.aggressiveMemory || cfg.iconCompression > 1) {
+            AppRepository.releaseIcons()
+            System.gc()
+        }
         io.shutdown()
         super.onDestroy()
     }
@@ -182,6 +190,13 @@ class SearchActivity : Activity() {
             list.visibility = if (shown.isEmpty()) View.GONE else View.VISIBLE
         }
         adapter.notifyDataSetChanged()
+    }
+
+    private fun focusSearchBar() {
+        input.requestFocus()
+        input.post {
+            getSystemService(InputMethodManager::class.java)?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }
     }
 
     private fun hideKeyboard() {
@@ -221,6 +236,11 @@ class SearchActivity : Activity() {
                 }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = pDpi(14) })
             }
             val app = shown[position]
+            if (app.icon === AppRepository.placeholder) {
+                AppRepository(this@SearchActivity).loadIcon(app.component, cfg.effectiveCompression, cfg.colorDepth)?.let {
+                    app.icon = it
+                }
+            }
             (row.getChildAt(0) as ImageView).setImageDrawable(app.icon)
             (row.getChildAt(1) as TextView).text = app.label
             return row

@@ -23,6 +23,7 @@
 
         <activity
             android:name=".LauncherActivity"
+            android:hardwareAccelerated="false"
             android:clearTaskOnLaunch="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode"
             android:excludeFromRecents="true"

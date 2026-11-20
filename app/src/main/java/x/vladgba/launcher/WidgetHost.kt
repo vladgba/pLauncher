@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.util.SizeF
 import android.view.Gravity
 import android.view.View
+import android.view.ViewOutlineProvider
+import android.graphics.Outline
 import android.widget.RemoteViews
 import android.widget.TextView
 import x.vladgba.launcher.ui.dpi
@@ -35,9 +37,20 @@ class LauncherWidgetHost(context: Context, hostId: Int, private val onProvidersC
  */
 class LauncherWidgetHostView(context: Context) : AppWidgetHostView(context) {
     var removePadding = false
+    var cornerRadiusDp = 0
+        set(value) { field = value; clipToOutline = value > 0; invalidateOutline() }
     var onRetry: (() -> Unit)? = null
     var failed = false
         private set
+
+    init {
+        outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height,
+                    context.dpi(cornerRadiusDp.toFloat()).toFloat())
+            }
+        }
+    }
 
     override fun setAppWidget(appWidgetId: Int, info: AppWidgetProviderInfo?) {
         super.setAppWidget(appWidgetId, info)

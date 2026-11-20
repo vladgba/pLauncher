@@ -18,6 +18,7 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.Rect
 import android.net.Uri
@@ -29,10 +30,14 @@ import android.os.UserHandle
 import android.provider.Settings
 import android.util.SizeF
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
@@ -64,6 +69,7 @@ import java.io.FileOutputStream
 import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.hypot
 
 class LauncherActivity : Activity(), WorkspaceView.Callbacks {
 
@@ -80,6 +86,10 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     private lateinit var workspace: WorkspaceView
     private lateinit var dragLayer: FrameLayout
     private lateinit var indicator: PageIndicator
+    private lateinit var dockPanel: LinearLayout
+    private lateinit var dockScroll: HorizontalScrollView
+    private lateinit var dockPages: LinearLayout
+    private var dockPageWidth = 0
 
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
@@ -87,6 +97,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
 
     /** Installed apps by flattened component name. */
     var apps: Map<String, AppInfo> = emptyMap(); private set
+    private val unmaskedIcons = HashMap<String, Drawable?>()
 
     private var pendingWidgetId = -1
     private var pendingWidgetInfo: AppWidgetProviderInfo? = null
@@ -99,6 +110,19 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     private var openPanel: DragSourcePanel? = null
     /** Folder an app is being dragged out of. */
     private var dragSourceFolder: FolderItem? = null
+    private var dragSourceDock: String? = null
+    private var dragSourceDrawer: String? = null
+    private var dockEdgeDirection = 0
+    private val dockEdgeFlip = object : Runnable {
+        override fun run() {
+            if (dockPageWidth <= 0 || dockEdgeDirection == 0) return
+            val next = (dockScroll.scrollX / dockPageWidth) + dockEdgeDirection
+            if (next in 0 until dockPages.childCount) {
+                dockScroll.smoothScrollTo(next * dockPageWidth, 0)
+                main.postDelayed(this, 650)
+            }
+        }
+    }
     /** Widget being dragged in from the picker. */
     private var dragWidgetInfo: AppWidgetProviderInfo? = null
     /** Where a dropped widget goes once bound/configured (null → page centre). */
@@ -128,7 +152,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         repo = AppRepository(this)
         iconCache = IconCache(this)
         // Show cached icons right away; live icons replace them after reloadApps().
-        apps = iconCache.memory().ifEmpty { iconCache.loadDisk() }
+        apps = iconCache.memory().ifEmpty { iconCache.loadDisk(model.config.effectiveCompression) }
         widgetManager = AppWidgetManager.getInstance(this)
         widgetHost = LauncherWidgetHost(this, WIDGET_HOST_ID) { main.post { reloadBrokenWidgets() } }
         launcherApps = getSystemService(LauncherApps::class.java)
@@ -141,9 +165,31 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
             it.callbacks = this
         }
         indicator = PageIndicator(this)
+        dockPages = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        dockScroll = x.vladgba.launcher.ui.DockPager(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(dockPages)
+            addOnLayoutChangeListener { _, l, _, r, _, _, _, _, _ ->
+                val newWidth = r - l
+                if (newWidth > 0 && newWidth != dockPageWidth) {
+                    dockPageWidth = newWidth
+                    rebuildDock()
+                }
+            }
+        }
+        dockPanel = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(0x66000000)
+            addView(dockScroll, LinearLayout.LayoutParams(0, -1, 1f))
+        }
         root.addView(workspace, FrameLayout.LayoutParams(-1, -1))
         root.addView(indicator, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        root.addView(dockPanel, FrameLayout.LayoutParams(-1, dpi(model.config.dockHeight.toFloat()), Gravity.BOTTOM))
         root.addView(dragLayer, FrameLayout.LayoutParams(-1, -1))
+        if (model.config.softwareRendering) {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
+            root.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+        }
         setContentView(root)
 
         root.setOnApplyWindowInsetsListener { _, insets -> applyInsets(insets); insets }
@@ -163,9 +209,53 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         cleanupOrphanWidgets()
         applyColorMode()
         workspace.sync()
+        updateHomeChrome()
         if (savedInstanceState == null) workspace.snapTo(model.config.homeX, model.config.homeY, animate = false)
         reloadApps()
         launcherApps.registerCallback(packageCallback, main)
+    }
+
+    /** Low memory: drop caches that re-create themselves on the next bind/query. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (model.config.aggressiveMemory || model.config.iconCompression > 1 || level >= TRIM_MEMORY_RUNNING_LOW) {
+            trimMemoryAggressively()
+        }
+    }
+
+    fun trimMemoryAggressively() {
+        customIconCache.clear() // decoded lazily again from files/custom_icons
+        unmaskedIcons.clear()
+        AppIconView.clearCaches()
+        AppRepository.releaseIcons() // next reloadApps() re-renders at the icon edge
+        if (model.config.aggressiveMemory || model.config.iconCompression > 1) {
+            System.gc()
+        }
+        logMemoryStats("afterTrim")
+    }
+
+    fun logMemoryStats(tag: String) {
+        val rt = Runtime.getRuntime()
+        val heapUsedMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
+        val heapAllocMb = rt.totalMemory() / (1024 * 1024)
+        try {
+            val smaps = java.io.File("/proc/self/smaps_rollup")
+            if (smaps.exists()) {
+                val lines = smaps.readLines().joinToString(" | ") { it.trim() }
+                android.util.Log.e("pLauncherRAM", "[$tag] smaps_rollup: $lines")
+            }
+        } catch (_: Exception) {}
+        try {
+            val am = getSystemService(android.app.ActivityManager::class.java)
+            val mi = am?.getProcessMemoryInfo(intArrayOf(android.os.Process.myPid()))?.firstOrNull()
+            if (mi != null) {
+                android.util.Log.e("pLauncherRAM", "[$tag] Java Heap: ${heapUsedMb}MB used (${heapAllocMb}MB alloc) | Android PSS: ${mi.totalPss / 1024}MB | Dalvik PSS: ${mi.dalvikPss / 1024}MB | Native PSS: ${mi.nativePss / 1024}MB | Graphics/Shared: ${mi.otherPss / 1024}MB | Private Dirty: ${mi.totalPrivateDirty / 1024}MB")
+            } else {
+                android.util.Log.e("pLauncherRAM", "[$tag] Java Heap: ${heapUsedMb}MB used (${heapAllocMb}MB alloc)")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("pLauncherRAM", "[$tag] Java Heap: ${heapUsedMb}MB used", e)
+        }
     }
 
     override fun onStart() {
@@ -173,11 +263,15 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         try { widgetHost.startListening() } catch (_: Exception) { }
         // Coming back: retry anything that failed while we weren't listening.
         if (::workspace.isInitialized) reloadBrokenWidgets()
+        logMemoryStats("onStart")
     }
 
     override fun onStop() {
         super.onStop()
         try { widgetHost.stopListening() } catch (_: Exception) { }
+        if (model.config.aggressiveMemory || model.config.iconCompression > 1) {
+            trimMemoryAggressively()
+        }
     }
 
     override fun onWindowFocusChanged(focus: Boolean) {
@@ -186,6 +280,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     }
 
     override fun onDestroy() {
+        stopDockEdge()
         launcherApps.unregisterCallback(packageCallback)
         io.shutdown()
         super.onDestroy()
@@ -218,9 +313,11 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         // Already resting on the default page → run the configured Home action.
         val onDefault = alreadyOnHome && resizeFrame == null && openPanel == null &&
                 workspace.isSettledOn(c.homeX, c.homeY)
+        stopDockEdge()
         openPanel?.cancel()
         finishResize()
         workspace.cancelDrag()
+        rebuildDock()
         if (onDefault) {
             HomeActions.perform(this, HomeAction.of(c.homeAction))
         } else {
@@ -258,12 +355,349 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
                 insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
         }
         systemInsets.set(r)
-        val lp = indicator.layoutParams as FrameLayout.LayoutParams
-        lp.bottomMargin = r.bottom + dpi(4f)
-        indicator.layoutParams = lp
-        // Indicator floats over the pages (drawn on top, touches pass through),
-        // so pages use the full height down to the navigation bar.
-        workspace.setContentInsets(r.left, r.top, r.right, r.bottom)
+        updateHomeChrome()
+    }
+
+    private fun updateHomeChrome() {
+        val c = model.config
+        val panelHeight = dpi((if (c.dockEnabled) c.dockHeight else 0).toFloat())
+        dockPanel.visibility = if (c.dockEnabled) View.VISIBLE else View.GONE
+        (dockPanel.layoutParams as FrameLayout.LayoutParams).also {
+            it.height = panelHeight
+            it.bottomMargin = systemInsets.bottom
+            dockPanel.layoutParams = it
+        }
+        dockScroll.visibility = if (c.dockEnabled) View.VISIBLE else View.GONE
+        indicator.style = c.indicatorStyle
+        indicator.sizeDp = c.indicatorSize
+        (indicator.layoutParams as FrameLayout.LayoutParams).also {
+            it.bottomMargin = systemInsets.bottom + panelHeight + dpi(4f)
+            indicator.layoutParams = it
+        }
+        val pad = dpi(c.edgePadding.toFloat())
+        val indicatorHeight = when (c.indicatorStyle) {
+            "hidden" -> 0
+            "numbers" -> dpi(((c.indicatorSize + 7) * 1.6f + 4f))
+            else -> dpi((c.pagesY * c.indicatorSize + (c.pagesY + 1) * 5 + 4).toFloat())
+        }
+        workspace.setContentInsets(systemInsets.left + pad, systemInsets.top + pad,
+            systemInsets.right + pad, systemInsets.bottom + panelHeight + indicatorHeight + pad)
+        rebuildDock()
+    }
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun rebuildDock() {
+        if (!::dockPages.isInitialized || dockPageWidth <= 0) return
+        val c = model.config
+        val oldPage = dockScroll.scrollX / dockPageWidth
+        dockPages.removeAllViews()
+        val pageCount = max(c.dockPages, (model.dock.size + c.dockColumns - 1) / c.dockColumns)
+        for (pageIndex in 0 until pageCount) {
+            val start = pageIndex * c.dockColumns
+            val group = if (start < model.dock.size)
+                model.dock.subList(start, min(start + c.dockColumns, model.dock.size))
+            else emptyList()
+            val page = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            dockPages.addView(page, LinearLayout.LayoutParams(dockPageWidth, -1))
+            for (component in group) {
+                if (component.isEmpty()) {
+                    page.addView(View(this), LinearLayout.LayoutParams(0, -1, 1f))
+                    continue
+                }
+                val folder = model.dockFolder(component)
+                if (component.startsWith("folder:") && folder == null) {
+                    page.addView(View(this), LinearLayout.LayoutParams(0, -1, 1f))
+                    continue
+                }
+                var lastRawX = 0f
+                var lastRawY = 0f
+                var dragStartX = 0f
+                var dragStartY = 0f
+                var dragging = false
+                var moved = false
+                val icon: View = if (folder != null) {
+                    createItemView(folder).also { v ->
+                        bindItemView(folder, v)
+                        v.setOnClickListener { Panels.openFolder(this@LauncherActivity, folder) }
+                    }
+                } else {
+                    AppIconView(this).apply {
+                        this.icon = iconFor(component)
+                        label = labelFor(component)
+                        showLabel = c.showLabels
+                        labelSizeSp = c.labelSize.toFloat()
+                        labelPosition = c.labelPosition
+                        iconScale = c.iconScale / 100f
+                        shape = c.iconShape
+                        applyHomePalette()
+                        labelShadow = c.labelShadow
+                        labelShadowStrength = c.labelShadowStrength
+                        setOnClickListener { launch(component, this) }
+                    }
+                }
+                icon.setOnLongClickListener {
+                    val started = if (lastRawX == 0f) false else if (folder != null) {
+                        startDockFolderDrag(folder, component, lastRawX, lastRawY)
+                    } else {
+                        startDockAppDrag(component, lastRawX, lastRawY)
+                    }
+                    if (!started) {
+                        if (folder != null) onItemLongPressReleased(folder, icon) else showAppMenu(component, icon, null)
+                    } else {
+                        icon.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        icon.isPressed = false
+                        icon.alpha = 0.35f
+                        dragging = true
+                        moved = false
+                        dragStartX = lastRawX; dragStartY = lastRawY
+                        icon.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    true
+                }
+                icon.setOnTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                        lastRawX = event.rawX; lastRawY = event.rawY
+                    }
+                    if (!dragging) return@setOnTouchListener false
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_MOVE -> {
+                            if (hypot(event.rawX - dragStartX, event.rawY - dragStartY) >
+                                ViewConfiguration.get(this).scaledTouchSlop) moved = true
+                            externalDragMove(event.rawX, event.rawY)
+                            updateDockEdge(event.rawX, event.rawY)
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            stopDockEdge()
+                            icon.alpha = 1f
+                            if (!moved) {
+                                externalDragEnd(true)
+                                icon.post {
+                                    if (folder != null) onItemLongPressReleased(folder, icon)
+                                    else showAppMenu(component, icon, null)
+                                }
+                            } else if (overDock(event.rawX, event.rawY)) {
+                                externalDragEnd(true)
+                                reorderDock(component, event.rawX)
+                            } else externalDragEnd(false)
+                            dragging = false
+                        }
+                        MotionEvent.ACTION_CANCEL -> {
+                            stopDockEdge()
+                            icon.alpha = 1f
+                            externalDragEnd(true)
+                            dragging = false
+                        }
+                    }
+                    true
+                }
+                page.addView(icon, LinearLayout.LayoutParams(0, -1, 1f))
+            }
+            repeat(c.dockColumns - group.size) {
+                page.addView(View(this), LinearLayout.LayoutParams(0, -1, 1f))
+            }
+        }
+        dockScroll.post { dockScroll.scrollTo(oldPage.coerceAtMost((dockPages.childCount - 1).coerceAtLeast(0)) * dockPageWidth, 0) }
+    }
+
+    private fun overDock(rawX: Float, rawY: Float): Boolean {
+        if (!model.config.dockEnabled || dockPanel.visibility != View.VISIBLE) return false
+        val p = IntArray(2)
+        dockPanel.getLocationOnScreen(p)
+        return rawX >= p[0] && rawX < p[0] + dockPanel.width &&
+            rawY >= p[1] && rawY < p[1] + dockPanel.height
+    }
+
+    private fun dockIndexAt(rawX: Float): Int {
+        if (dockPageWidth <= 0) return model.dock.size
+        val p = IntArray(2)
+        dockScroll.getLocationOnScreen(p)
+        val x = (rawX - p[0]).coerceIn(0f, dockPageWidth.toFloat())
+        val maxSlots = dockPages.childCount.coerceAtLeast(1) * model.config.dockColumns
+        return ((dockScroll.scrollX + x) / (dockPageWidth.toFloat() / model.config.dockColumns))
+            .toInt().coerceIn(0, maxSlots - 1)
+    }
+
+    private fun trimDock() {
+        while (model.dock.isNotEmpty() && model.dock.last().isEmpty()) {
+            model.dock.removeAt(model.dock.lastIndex)
+        }
+    }
+
+    private fun updateDockEdge(rawX: Float, rawY: Float) {
+        if (dockPageWidth <= 0) return
+        val p = IntArray(2)
+        dockScroll.getLocationOnScreen(p)
+        val margin = dpi(28f)
+        val direction = if (!overDock(rawX, rawY)) 0 else when {
+            rawX < p[0] + margin && dockScroll.scrollX > 0 -> -1
+            rawX > p[0] + dockScroll.width - margin &&
+                dockScroll.scrollX / dockPageWidth < dockPages.childCount - 1 -> 1
+            else -> 0
+        }
+        if (direction != dockEdgeDirection) {
+            main.removeCallbacks(dockEdgeFlip)
+            dockEdgeDirection = direction
+            if (direction != 0) main.postDelayed(dockEdgeFlip, 500)
+        }
+    }
+
+    private fun stopDockEdge() {
+        main.removeCallbacks(dockEdgeFlip)
+        dockEdgeDirection = 0
+    }
+
+    private fun startDockFolderDrag(folder: FolderItem, entry: String, rawX: Float, rawY: Float): Boolean {
+        if (isLayoutLocked()) return false
+        val page = workspace.currentPage ?: return false
+        val ghost = createItemView(folder)
+        ghost.tag = folder
+        bindItemView(folder, ghost)
+        dragSourceDock = entry
+        val ok = workspace.beginExternalDrag(folder, ghost,
+            page.cellW.toInt().coerceAtLeast(dpi(48f)),
+            page.cellH.toInt().coerceAtLeast(dpi(48f)), rawX, rawY)
+        if (!ok) dragSourceDock = null
+        return ok
+    }
+
+    private fun moveFolderToDock(folder: FolderItem, targetIndex: Int = -1) {
+        if (!model.config.dockEnabled) {
+            model.config.dockEnabled = true
+            updateHomeChrome()
+        }
+        model.items.remove(folder)
+        if (model.dockFolders.none { it.id == folder.id }) model.dockFolders += folder
+        val entry = "folder:${folder.id}"
+        val prev = model.dock.indexOf(entry)
+        if (prev >= 0) model.dock[prev] = ""
+        if (targetIndex < 0) {
+            val emptyIdx = model.dock.indexOf("")
+            if (emptyIdx >= 0) model.dock[emptyIdx] = entry else model.dock.add(entry)
+        } else {
+            while (model.dock.size <= targetIndex) model.dock.add("")
+            if (model.dock[targetIndex].isEmpty()) {
+                model.dock[targetIndex] = entry
+            } else {
+                model.dock.add(targetIndex, entry)
+            }
+        }
+        trimDock()
+        saveAndSync()
+        rebuildDock()
+    }
+
+    private fun startDockAppDrag(component: String, rawX: Float, rawY: Float): Boolean {
+        if (isLayoutLocked()) return false
+        val page = workspace.currentPage ?: return false
+        val item = AppItem(model.newId(), component)
+        val ghost = createItemView(item)
+        ghost.tag = item
+        bindItemView(item, ghost)
+        dragSourceDock = component
+        val ok = workspace.beginExternalDrag(item, ghost,
+            page.cellW.toInt().coerceAtLeast(dpi(48f)),
+            page.cellH.toInt().coerceAtLeast(dpi(48f)), rawX, rawY)
+        if (!ok) dragSourceDock = null
+        return ok
+    }
+
+    private fun reorderDock(component: String, rawX: Float) {
+        val target = dockIndexAt(rawX)
+        val srcIdx = model.dock.indexOf(component)
+        if (srcIdx < 0) return
+        while (model.dock.size <= target) model.dock.add("")
+        if (target == srcIdx) return
+        val displaced = model.dock[target]
+        model.dock[target] = component
+        model.dock[srcIdx] = displaced
+        trimDock()
+        save()
+        rebuildDock()
+    }
+
+    fun openAppDrawer() { Panels.openAppDrawer(this) }
+
+    private fun moveToDock(component: String, targetIndex: Int = -1) {
+        if (component !in apps) return
+        if (!model.config.dockEnabled) {
+            model.config.dockEnabled = true
+            updateHomeChrome()
+        }
+        model.hidden.remove(component)
+        model.drawerOnly.remove(component)
+        model.items.removeAll { it is AppItem && it.component == component }
+        for (folder in model.folders()) {
+            folder.apps.remove(component)
+            if (folder.apps.isEmpty()) model.items.remove(folder)
+        }
+        val prev = model.dock.indexOf(component)
+        if (prev >= 0) model.dock[prev] = ""
+        if (targetIndex < 0) {
+            val emptyIdx = model.dock.indexOf("")
+            if (emptyIdx >= 0) model.dock[emptyIdx] = component else model.dock.add(component)
+        } else {
+            while (model.dock.size <= targetIndex) model.dock.add("")
+            if (model.dock[targetIndex].isEmpty()) {
+                model.dock[targetIndex] = component
+            } else {
+                model.dock.add(targetIndex, component)
+            }
+        }
+        trimDock()
+        saveAndSync()
+        rebuildDock()
+        dockScroll.post {
+            if (dockPageWidth > 0) dockScroll.smoothScrollTo(
+                (model.dock.indexOf(component) / model.config.dockColumns) * dockPageWidth, 0)
+        }
+    }
+
+    private fun removeAppPlacement(component: String) {
+        model.items.removeAll { it is AppItem && it.component == component }
+        for (folder in model.folders()) {
+            folder.apps.remove(component)
+            if (folder.apps.isEmpty()) model.items.remove(folder)
+        }
+        for (i in model.dock.indices) if (model.dock[i] == component) model.dock[i] = ""
+        trimDock()
+    }
+
+    private fun moveToDrawer(component: String) {
+        removeAppPlacement(component)
+        model.hidden.remove(component)
+        model.drawerOnly.add(component)
+        saveAndSync()
+        rebuildDock()
+    }
+
+    private fun moveToHome(component: String) {
+        removeAppPlacement(component)
+        model.hidden.remove(component)
+        model.drawerOnly.remove(component)
+        if (component in apps) {
+            val item = AppItem(model.newId(), component)
+            model.items.add(item)
+            val (w, h) = workspace.contentSizeDp()
+            model.placeItems(listOf(item), w, h, workspace.curX, workspace.curY)
+        }
+        saveAndSync()
+        rebuildDock()
+    }
+
+    private fun moveFromDock(component: String) {
+        val idx = model.dock.indexOf(component)
+        if (idx < 0) return
+        model.dock[idx] = ""
+        trimDock()
+        model.hidden.remove(component)
+        if (component in apps) {
+            val item = AppItem(model.newId(), component)
+            model.items += item
+            val (w, h) = workspace.contentSizeDp()
+            model.placeItems(listOf(item), w, h, workspace.curX, workspace.curY)
+        }
+        saveAndSync()
+        rebuildDock()
     }
 
     // ================================================================= apps
@@ -281,12 +715,27 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         main.postDelayed(reloadRunnable, 400)
     }
 
-    private fun reloadApps() {
+    fun reloadApps() {
+        val compression = model.config.effectiveCompression
+        val colorDepth = model.config.colorDepth
+        val needed = if (model.config.lazyIcons && !firstRun) model.allPlacedComponents() else null
         io.execute {
-            val list = repo.query()
+            val list = repo.query(compression, colorDepth, needed)
             main.post {
                 if (isDestroyed) return@post
+                unmaskedIcons.clear()
                 apps = list.associateBy { it.component }
+                for (f in model.dockFolders) f.apps.retainAll(apps.keys)
+                model.dockFolders.removeAll { it.apps.isEmpty() }
+                for (i in model.dock.indices) {
+                    val entry = model.dock[i]
+                    if (entry.startsWith("folder:")) {
+                        if (model.dockFolder(entry) == null) model.dock[i] = ""
+                    } else if (entry.isNotEmpty() && entry !in apps) {
+                        model.dock[i] = ""
+                    }
+                }
+                trimDock()
                 if (firstRun && list.isNotEmpty()) {
                     // Nothing is placed until the user chose package groups (or skipped).
                     if (!groupDialogShown) {
@@ -305,12 +754,23 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
                 val (w, h) = workspace.contentSizeDp()
                 val pagesBefore = model.config.pagesX
                 // Hidden apps are left out, so syncApps removes them from pages and folders.
-                model.syncApps(list.map { it.component }.filter { it !in model.hidden }, w, h)
+                if (model.config.newAppLocation == "drawer") {
+                    val placed = model.items.filterIsInstance<AppItem>().map { it.component }.toSet() +
+                        model.folders().flatMap { it.apps } + model.dock
+                    list.asSequence().map { it.component }
+                        .filter { it !in placed && it !in model.hidden }
+                        .forEach { model.drawerOnly += it }
+                }
+                model.syncApps(list.map { it.component }.filter {
+                    it !in model.hidden && it !in model.dock && it !in model.drawerOnly
+                }, w, h)
                 if (model.config.pagesX > pagesBefore) {
                     toast("Added pages to fit all apps")
                 }
                 saveAndSync()
-                io.execute { iconCache.store(list) }
+                rebuildDock()
+                logMemoryStats("onAppsLoaded")
+                io.execute { iconCache.store(list.filter { it.icon !== AppRepository.placeholder }, compression) }
                 // Widgets from a backup whose app is (now) installed get re-created.
                 restoreNextWidget()
             }
@@ -330,8 +790,36 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     }
 
     /** Icon shown for an app: custom icon if set, else the app's own. */
-    fun iconFor(component: String): Drawable? = customIcon(component) ?: apps[component]?.icon
-    fun originalIcon(component: String): Drawable? = apps[component]?.icon
+    fun iconFor(component: String): Drawable? {
+        val custom = customIcon(component)
+        if (custom != null) return custom
+        val app = apps[component] ?: return null
+        // Cached bitmaps already contain Android's original adaptive mask. Use the
+        // package's layers for a selected launcher mask so no old outline remains.
+        if (model.config.iconShape != "system") {
+            if (!unmaskedIcons.containsKey(component)) {
+                unmaskedIcons[component] = try {
+                    val cn = ComponentName.unflattenFromString(component)
+                    (cn?.let { packageManager.getActivityIcon(it) } as? AdaptiveIconDrawable)
+                } catch (_: Exception) { null }
+            }
+            unmaskedIcons[component]?.let { return it }
+        }
+        if (app.icon === AppRepository.placeholder) {
+            val loaded = repo.loadIcon(component, model.config.effectiveCompression, model.config.colorDepth)
+            if (loaded != null) app.icon = loaded
+        }
+        return app.icon
+    }
+
+    fun originalIcon(component: String): Drawable? {
+        val app = apps[component] ?: return null
+        if (app.icon === AppRepository.placeholder) {
+            val loaded = repo.loadIcon(component, model.config.effectiveCompression, model.config.colorDepth)
+            if (loaded != null) app.icon = loaded
+        }
+        return app.icon
+    }
     /** Label shown for an app: custom name if set, else the app's own. */
     fun labelFor(component: String): String = model.customLabels[component] ?: originalLabel(component)
     fun originalLabel(component: String): String = apps[component]?.label
@@ -352,7 +840,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         return when {
             spec.startsWith("app:") -> apps[spec.removePrefix("app:")]?.icon
             spec.startsWith("file:") -> customIconCache[spec] ?: run {
-                val edge = (96 * resources.displayMetrics.density).toInt().coerceIn(96, 384)
+                val edge = IconBitmaps.iconEdgePx(resources.displayMetrics.density, model.config.effectiveCompression)
                 val bmp = IconBitmaps.decodeFile(File(customIconDir, spec.removePrefix("file:")), edge)
                 bmp?.let { BitmapDrawable(resources, it).also { d -> customIconCache[spec] = d } }
             }
@@ -504,7 +992,11 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     override fun bindItemView(item: HomeItem, view: View) {
         val icon = view as? AppIconView ?: return
         icon.applyHomePalette()
+        icon.labelShadow = model.config.labelShadow
+        icon.labelShadowStrength = model.config.labelShadowStrength
         icon.showLabel = model.config.showLabels
+        icon.labelSizeSp = model.config.labelSize.toFloat()
+        icon.labelPosition = model.config.labelPosition
         icon.iconScale = model.config.iconScale / 100f
         icon.shape = model.config.iconShape
         when (item) {
@@ -524,6 +1016,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
             return unavailableView(item)
         }
         (v as? LauncherWidgetHostView)?.onRetry = { reloadWidget(item) }
+        (v as? LauncherWidgetHostView)?.cornerRadiusDp = model.config.widgetCornerRadius
         // Give the provider its real size right away; many widgets only render after this.
         updateWidgetSize(item, v)
         v.post { updateWidgetSize(item, v) }
@@ -623,11 +1116,30 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     }
 
     override fun onItemDropped(item: HomeItem, intoFolder: FolderItem?) {
+        stopDockEdge()
         if (intoFolder != null && item is AppItem) {
             intoFolder.apps += item.component
             model.items.remove(item)
         }
         saveAndSync()
+    }
+
+    override fun onDockDrop(item: HomeItem, rawX: Float, rawY: Float): Boolean {
+        stopDockEdge()
+        if (!overDock(rawX, rawY)) return false
+        dragSourceFolder = null
+        dragSourceDrawer = null
+        when (item) {
+            is AppItem -> moveToDock(item.component, dockIndexAt(rawX))
+            is FolderItem -> moveFolderToDock(item, dockIndexAt(rawX))
+            else -> return false
+        }
+        return true
+    }
+
+    override fun isDockHover(rawX: Float, rawY: Float): Boolean {
+        updateDockEdge(rawX, rawY)
+        return overDock(rawX, rawY)
     }
 
     override fun onEmptyLongPress(x: Float, y: Float) {
@@ -649,6 +1161,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
             }
             pm.menu.add(0, 5, 4, if (locked) "Unlock layout" else "Lock layout")
             pm.menu.add(0, 6, 5, "About pLauncher")
+            pm.menu.add(0, 7, 6, "App drawer")
             pm.setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> Panels.pickWidget(this)
@@ -658,6 +1171,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
                     3 -> Dialogs.settings(this, model.config) { applySettings() }
                     4 -> setDefaultPage(workspace.curX, workspace.curY)
                     6 -> showPAbout(PAboutInfo(repo = "pLauncher"))
+                    7 -> openAppDrawer()
                     5 -> {
                         model.config.layoutLocked = !model.config.layoutLocked
                         save()
@@ -976,12 +1490,16 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     // ================================================================= misc actions
 
     private fun applySettings() {
+        applyColorMode()
+        updateHomeChrome()
+        for (wi in model.widgets()) {
+            (workspace.itemViews[wi.id] as? LauncherWidgetHostView)?.cornerRadiusDp = model.config.widgetCornerRadius
+        }
         val (w, h) = workspace.contentSizeDp()
         model.normalize(w, h)
         // Grid-fixed widgets follow the new grid.
         if (model.snapWidgets(w, h)) for (wi in model.widgets()) if (wi.snap) updateWidgetSize(wi)
         root.requestApplyInsets()
-        applyColorMode()
         saveAndSync()
     }
 
@@ -1003,6 +1521,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
             window.decorView.systemUiVisibility = v
         }
         indicator.invalidate()
+        rebuildDock()
         x.vladgba.launcher.search.SearchWidget.refreshAll(this, Palette.night)
     }
 
@@ -1051,6 +1570,20 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         return ok
     }
 
+    fun startDrawerAppDrag(component: String, rawX: Float, rawY: Float): Boolean {
+        if (isLayoutLocked()) { toast("Layout is locked"); return false }
+        val page = workspace.currentPage ?: return false
+        val item = AppItem(model.newId(), component)
+        val view = createItemView(item)
+        view.tag = item
+        bindItemView(item, view)
+        dragSourceDrawer = component
+        val ok = workspace.beginExternalDrag(item, view, page.cellW.toInt().coerceAtLeast(1),
+            page.cellH.toInt().coerceAtLeast(1), rawX, rawY)
+        if (!ok) dragSourceDrawer = null
+        return ok
+    }
+
     /** Long-press-drag of a widget preview out of the widget picker. */
     fun startWidgetDrag(info: AppWidgetProviderInfo, preview: View, rawX: Float, rawY: Float): Boolean {
         val (w, h) = Panels.defaultWidgetSizeDp(this, info)
@@ -1067,9 +1600,48 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     fun externalDragEnd(cancelled: Boolean) = workspace.externalDragEnd(cancelled)
 
     override fun onExternalDrop(item: HomeItem, intoFolder: FolderItem?, cancelled: Boolean) {
+        stopDockEdge()
         val source = dragSourceFolder
+        val dockSource = dragSourceDock
+        val drawerSource = dragSourceDrawer
         val widgetInfo = dragWidgetInfo
-        dragSourceFolder = null; dragWidgetInfo = null
+        dragSourceFolder = null; dragSourceDock = null; dragSourceDrawer = null; dragWidgetInfo = null
+
+        if (item is AppItem && drawerSource != null) {
+            if (cancelled) return
+            removeAppPlacement(drawerSource)
+            model.hidden.remove(drawerSource)
+            model.drawerOnly.remove(drawerSource)
+            if (intoFolder != null && intoFolder in model.items) intoFolder.apps += drawerSource
+            else { model.bringToFront(item); model.items += item }
+            saveAndSync()
+            rebuildDock()
+            return
+        }
+
+        if (item is FolderItem && dockSource != null) {
+            if (cancelled) return
+            val idx = model.dock.indexOf(dockSource)
+            if (idx >= 0) model.dock[idx] = ""
+            model.dockFolders.removeAll { it.id == item.id }
+            trimDock()
+            model.bringToFront(item); model.items += item
+            saveAndSync()
+            rebuildDock()
+            return
+        }
+
+        if (item is AppItem && dockSource != null) {
+            if (cancelled) return
+            val idx = model.dock.indexOf(dockSource)
+            if (idx >= 0) model.dock[idx] = ""
+            trimDock()
+            if (intoFolder != null) intoFolder.apps += dockSource
+            else { model.bringToFront(item); model.items += item }
+            saveAndSync()
+            rebuildDock()
+            return
+        }
 
         if (item is AppItem && source != null) {
             if (cancelled || intoFolder === source) return // stays in its folder
@@ -1116,7 +1688,11 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         }
         m.add(2, M_EDIT, o++, "Edit icon & name…")
         m.add(2, M_INFO, o++, "App info")
-        if (unlocked) m.add(2, M_HIDE, o++, "Hide app")
+        if (unlocked) {
+            m.add(2, M_DOCK, o++, if (component in model.dock) "Move to home" else "Move to dock")
+            m.add(2, M_DRAWER, o++, if (component in model.drawerOnly || component in model.hidden) "Move to home" else "Move to app drawer")
+            m.add(2, M_HIDE, o++, if (component in model.hidden) "Unhide app" else "Hide app")
+        }
         m.add(2, M_UNINSTALL, o, "Uninstall")
         pm.setOnMenuItemClickListener { mi ->
             if (mi.hasSubMenu()) return@setOnMenuItemClickListener false // let it open
@@ -1128,9 +1704,11 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
                 M_INFO -> openAppInfo(component)
                 M_UNINSTALL -> uninstall(component)
                 M_EDIT -> Dialogs.editApp(this, component)
+                M_DOCK -> if (component in model.dock) moveFromDock(component) else moveToDock(component)
+                M_DRAWER -> if (component in model.drawerOnly || component in model.hidden) moveToHome(component) else moveToDrawer(component)
                 M_HIDE -> {
-                    setHidden(model.hidden + component)
-                    toast("${labelFor(component)} hidden · unhide in Home screen settings")
+                    if (component in model.hidden) setHidden(model.hidden - component)
+                    else setHidden(model.hidden + component)
                 }
                 M_GESTURES -> Dialogs.gestures(this, component)
                 else -> homeItem?.let { onItemMenu(it, anchor, id) }
@@ -1197,6 +1775,7 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
     // ================================================================= hidden apps
 
     val hiddenApps: Set<String> get() = model.hidden
+    val drawerOnlyApps: Set<String> get() = model.drawerOnly
 
     /**
      * Applies a new hidden set: newly hidden apps leave the home screen and folders
@@ -1209,19 +1788,21 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         model.hidden += newHidden
 
         if (added.isNotEmpty()) {
+            model.dock.removeAll(added)
             model.items.removeAll { it is AppItem && it.component in added }
             for (f in model.folders()) {
                 f.apps.removeAll { it in added }
                 if (f.apps.isEmpty()) model.items.remove(f)
             }
         }
-        val back = removed.filter { it in apps }.map { AppItem(model.newId(), it) }
+        val back = removed.filter { it in apps && it !in model.dock && it !in model.drawerOnly }.map { AppItem(model.newId(), it) }
         if (back.isNotEmpty()) {
             model.items += back
             val (w, h) = workspace.contentSizeDp()
             model.placeItems(back, w, h, workspace.curX, workspace.curY)
         }
         saveAndSync()
+        rebuildDock()
     }
 
     private fun openAppInfo(component: String) {
@@ -1412,6 +1993,8 @@ class LauncherActivity : Activity(), WorkspaceView.Callbacks {
         private const val M_GESTURES = 13
         private const val M_HIDE = 14
         private const val M_EDIT = 15
+        private const val M_DOCK = 16
+        private const val M_DRAWER = 17
         private const val REQ_ICON_IMAGE = 14
         private const val REQ_EXPORT = 15
         private const val REQ_IMPORT = 16

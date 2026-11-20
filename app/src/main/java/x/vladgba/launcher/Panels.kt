@@ -14,12 +14,16 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RemoteViews
 import android.widget.ScrollView
 import android.widget.TextView
+import android.text.Editable
+import android.text.TextWatcher
 import x.vladgba.launcher.model.FolderItem
 import x.vladgba.launcher.ui.AppIconView
 import x.vladgba.launcher.ui.DragSourcePanel
@@ -36,6 +40,74 @@ object Panels {
     private fun cardBackground(ctx: Context) = GradientDrawable().apply {
         setColor(Palette.card)
         cornerRadius = ctx.dp(20f)
+    }
+
+    fun openAppDrawer(a: LauncherActivity): DragSourcePanel {
+        val cfg = a.config
+        val cols = cfg.folderColumns
+        val pad = a.dpi(14f)
+        val maxW = (a.resources.displayMetrics.widthPixels * 0.92f).toInt().coerceAtMost(a.dpi(560f))
+        val cellW = ((maxW - pad * 2) / cols).coerceAtLeast(1)
+        val cellH = (cellW * 1.2f).toInt()
+        val grid = GridLayout(a).apply { columnCount = cols }
+        val scroll = ScrollView(a).apply {
+            isVerticalScrollBarEnabled = true
+            addView(grid)
+        }
+        val search = EditText(a).apply { hint = "Search apps"; setSingleLine(true) }
+        val hidden = CheckBox(a).apply { text = "Show hidden apps" }
+        val contents = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+            background = cardBackground(a)
+            addView(search, LinearLayout.LayoutParams(-1, -2))
+            addView(hidden, LinearLayout.LayoutParams(-1, -2))
+            addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        contents.layoutParams = FrameLayout.LayoutParams(maxW,
+            (a.resources.displayMetrics.heightPixels * 0.72f).toInt(), Gravity.CENTER)
+        val panel = DragSourcePanel(a, contents)
+        fun refresh() {
+            grid.removeAllViews()
+            panel.draggables.clear()
+            val query = search.text.toString().trim()
+            val shown = a.drawerOnlyApps + (if (hidden.isChecked) a.hiddenApps else emptySet())
+            val apps = shown.mapNotNull { a.apps[it] }.filter {
+                a.labelFor(it.component).contains(query, ignoreCase = true)
+            }.sortedBy { a.labelFor(it.component).lowercase() }
+            for (app in apps) {
+                val component = app.component
+                val icon = AppIconView(a).apply {
+                    this.icon = a.iconFor(component)
+                    label = a.labelFor(component)
+                    showLabel = true
+                    labelSizeSp = cfg.labelSize.toFloat()
+                    labelPosition = cfg.labelPosition
+                    iconScale = cfg.iconScale / 100f
+                    shape = cfg.iconShape
+                    labelColor = Palette.cardText
+                    labelShadow = cfg.labelShadow
+                    labelShadowStrength = cfg.labelShadowStrength
+                    tag = component
+                    setOnClickListener { a.launch(component, it); panel.close() }
+                }
+                grid.addView(icon, GridLayout.LayoutParams().apply { width = cellW; height = cellH })
+                panel.draggables += icon
+            }
+        }
+        hidden.setOnCheckedChangeListener { _, _ -> refresh() }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { refresh() }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+        panel.onItemMenu = { v -> a.showAppMenu(v.tag as String, v, homeItem = null) { panel.close() } }
+        panel.onDragStart = { v, rx, ry -> a.startDrawerAppDrag(v.tag as String, rx, ry) }
+        panel.onDragMove = { rx, ry -> a.externalDragMove(rx, ry) }
+        panel.onDragEnd = { cancelled -> a.externalDragEnd(cancelled) }
+        refresh()
+        a.showPanel(panel)
+        return panel
     }
 
     // ================================================================= folder
@@ -73,10 +145,13 @@ object Panels {
                 icon = a.iconFor(component)
                 label = a.labelFor(component)
                 showLabel = cfg.showLabels
+                labelSizeSp = cfg.labelSize.toFloat()
+                labelPosition = cfg.labelPosition
                 iconScale = cfg.iconScale / 100f
                 shape = cfg.iconShape
                 labelColor = Palette.cardText
-                labelShadow = false
+                labelShadow = cfg.labelShadow
+                labelShadowStrength = cfg.labelShadowStrength
                 tag = component
                 setOnClickListener { a.launch(component, it); panel.close() }
             }
